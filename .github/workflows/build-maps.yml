@@ -145,6 +145,8 @@ jobs:
     needs: build
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -186,3 +188,16 @@ jobs:
           name: all-regions
           path: upload
           retention-days: 14
+
+      - name: Update the repo's Ontario copy (only until R2 is set up)
+        if: env.R2_READY != '1'
+        run: |
+          if [ ! -f upload/ontario/manifest.json ]; then echo "No Ontario build this run"; exit 0; fi
+          rm -rf data && mkdir -p data && cp -r upload/ontario/* data/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "Update Ontario roads, places and transit from OpenStreetMap"
+          git pull --rebase origin main
+          git push
