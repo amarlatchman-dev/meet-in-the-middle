@@ -459,6 +459,7 @@ function bindSeg(id, key) {
     if (settings[key] === b.dataset.v) return;
     settings[key] = b.dataset.v; paint(); save();
     if (key === "mode") invalidate();
+    else if (result && result.kind === "roads") { chooseMeetingRoads(); finishResultAndNearby(); play(true); }
     else if (result && G && !busy) { const R = result; busy = true; renderList(); computeMeet(R).then(() => { if (result !== R) return; setStatus("", ""); finishResultAndNearby(); play(true); }).catch((e) => setStatus(e.message, "err")).finally(() => { busy = false; renderList(); }); }
     goalHint();
   });
@@ -661,7 +662,216 @@ function sortedOrder(keys) {
 }
 const tick = () => new Promise((r) => setTimeout(r, 16));
 
+/* ---------------- pre-built regional road maps ---------------- */
+// Built by tools/build_region.py via the "Build road maps" GitHub Action.
+const REGIONS = [
+  { id: "gta", name: "Greater Toronto Area", bbox: [42.85, -80.25, 44.15, -78.65], file: "data/gta.bin" },
+];
+const regionCache = {};
+function regionFor(ps) {
+  return REGIONS.find((r) => ps.every((p) => p.lat >= r.bbox[0] && p.lat <= r.bbox[2] && p.lon >= r.bbox[1] && p.lon <= r.bbox[3]));
+}
+function loadRegion(r, onProgress) {
+  if (!regionCache[r.id]) {
+    regionCache[r.id] = (async () => {
+      const res = await fetch(r.file);
+      if (!res.ok) throw new Error(`map file missing (${res.status})`);
+      const total = +res.headers.get("content-length") || 0;
+      let buf;
+      if (res.body && res.body.getReader) {
+        const reader = res.body.getReader(), parts = [];
+        let got = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value); got += value.length;
+          onProgress && onProgress(got, total);
+        }
+        const all = new Uint8Array(got); let o = 0;
+        for (const p of parts) { all.set(p, o); o += p.length; }
+        buf = all.buffer;
+      } else buf = await res.arrayBuffer();
+      const dv = new DataView(buf);
+      if (String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== "MITM") throw new Error("map file is damaged");
+      const N = dv.getUint32(8, true), E = dv.getUint32(12, true);
+      let off = 16;
+      const take = (T, n, bytes) => { const a = new T(buf, off, n); off += n * bytes; return a; };
+      const D = { N, E };
+      D.lat = take(Int32Array, N, 4); D.lon = take(Int32Array, N, 4);
+      D.a = take(Uint32Array, E, 4); D.b = take(Uint32Array, E, 4); D.len = take(Float32Array, E, 4);
+      D.cls = take(Uint8Array, E, 1); D.ow = take(Int8Array, E, 1); D.spd = take(Uint8Array, E, 1);
+      return D;
+    })().catch((e) => { delete regionCache[r.id]; throw e; });
+  }
+  return regionCache[r.id];
+}
+const CLASS_KMH = [100, 80, 60, 50, 45, 40, 30, 10, 60, 50, 45, 40, 35, 5];
+function buildLocalGraph(D, bbox, mode) {
+  const [s, w, n, e] = bbox.map((v) => Math.round(v * 1e6));
+  const local = new Int32Array(D.N).fill(-1);
+  const lat = [], lon = [], sA = [], sB = [], eF = [], eT = [], eC = [], eL = [];
+  const inBox = (i) => D.lat[i] >= s && D.lat[i] <= n && D.lon[i] >= w && D.lon[i] <= e;
+  const L = (i) => { if (local[i] < 0) { local[i] = lat.length; lat.push(D.lat[i] / 1e6); lon.push(D.lon[i] / 1e6); } return local[i]; };
+  for (let k = 0; k < D.E; k++) {
+    const a = D.a[k], b = D.b[k], c = D.cls[k];
+    if (!inBox(a) && !inBox(b)) continue;
+    if (mode === "walk" ? (c === 0 || c === 8) : c === 13) continue;
+    const speed = mode === "walk" ? WALK_MS : ((D.spd[k] || CLASS_KMH[c] || 35) / 3.6) * 0.8;
+    const ow = mode === "walk" ? 0 : D.ow[k];
+    const la = L(a), lb = L(b), d = D.len[k], cost = d / speed;
+    sA.push(la); sB.push(lb);
+    if (ow >= 0) { eF.push(la); eT.push(lb); eC.push(cost); eL.push(d); }
+    if (ow <= 0) { eF.push(lb); eT.push(la); eC.push(cost); eL.push(d); }
+  }
+  const N = lat.length, m = eF.length;
+  const off = new Uint32Array(N + 1);
+  for (let k = 0; k < m; k++) off[eF[k] + 1]++;
+  for (let i = 0; i < N; i++) off[i + 1] += off[i];
+  const fill = off.slice(0, N), to = new Int32Array(m), cost = new Float64Array(m), len = new Float64Array(m);
+  for (let k = 0; k < m; k++) { const p = fill[eF[k]]++; to[p] = eT[k]; cost[p] = eC[k]; len[p] = eL[k]; }
+  const par = new Int32Array(N); for (let i = 0; i < N; i++) par[i] = i;
+  const find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+  for (let k = 0; k < sA.length; k++) { const a = find(sA[k]), b = find(sB[k]); if (a !== b) par[a] = b; }
+  const size = new Map(); let best = -1, bestN = 0;
+  for (let i = 0; i < N; i++) { const r = find(i); const c = (size.get(r) || 0) + 1; size.set(r, c); if (c > bestN) { bestN = c; best = r; } }
+  const inMain = new Uint8Array(N); for (let i = 0; i < N; i++) inMain[i] = find(i) === best ? 1 : 0;
+  return {
+    kind: "roads", n: N, lat: Float64Array.from(lat), lon: Float64Array.from(lon), off, to, cost, len, inMain,
+    sA: Int32Array.from(sA), sB: Int32Array.from(sB), S: sA.length,
+    px: new Float32Array(N), py: new Float32Array(N),
+  };
+}
+function snapNode(lat, lon) {
+  const k = Math.cos(lat * Math.PI / 180);
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < G.n; i++) {
+    if (!G.inMain[i]) continue;
+    const dy = G.lat[i] - lat, dx = (G.lon[i] - lon) * k, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+function dijkstra(src) {
+  const n = G.n, dist = new Float64Array(n).fill(Infinity), meters = new Float64Array(n), pred = new Int32Array(n).fill(-1);
+  const hk = [], hv = [];
+  const push = (k, v) => {
+    let i = hk.length; hk.push(k); hv.push(v);
+    while (i > 0) { const p = (i - 1) >> 1; if (hk[p] <= k) break; hk[i] = hk[p]; hv[i] = hv[p]; i = p; }
+    hk[i] = k; hv[i] = v;
+  };
+  const pop = () => {
+    const top = hv[0], lk = hk.pop(), lv = hv.pop(), N = hk.length;
+    if (N) {
+      let i = 0;
+      for (;;) {
+        let c = 2 * i + 1; if (c >= N) break;
+        if (c + 1 < N && hk[c + 1] < hk[c]) c++;
+        if (hk[c] >= lk) break;
+        hk[i] = hk[c]; hv[i] = hv[c]; i = c;
+      }
+      hk[i] = lk; hv[i] = lv;
+    }
+    return top;
+  };
+  dist[src] = 0; push(0, src);
+  const done = new Uint8Array(n);
+  while (hk.length) {
+    const d0 = hk[0], u = pop();
+    if (done[u]) continue; done[u] = 1;
+    for (let e = G.off[u], end = G.off[u + 1]; e < end; e++) {
+      const v = G.to[e], nd = d0 + G.cost[e];
+      if (nd < dist[v]) { dist[v] = nd; meters[v] = meters[u] + G.len[e]; pred[v] = u; push(nd, v); }
+    }
+  }
+  return { dist, meters, pred };
+}
+async function analyzeLocal(region) {
+  const mode = settings.mode;
+  setStatus(`Loading the ${region.name} road map…`, "busy");
+  const D = await loadRegion(region, (got, total) =>
+    setStatus(`Loading the ${region.name} road map (${(got / 1e6).toFixed(1)}${total ? " of " + (total / 1e6).toFixed(1) : ""} MB, first time only)…`, "busy"));
+  let s = 90, w = 180, n = -90, e = -180;
+  for (const p of people) { s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lon); e = Math.max(e, p.lon); }
+  const kx = Math.cos(((s + n) / 2) * Math.PI / 180);
+  const padLat = Math.max((n - s) * 0.15, 0.02), padLon = Math.max((e - w) * 0.15, 0.02 / kx);
+  setStatus("Building the street network…", "busy"); await tick();
+  G = buildLocalGraph(D, [s - padLat, w - padLon, n + padLat, e + padLon], mode);
+  if (G.S < 10) throw new Error("no roads in the pre-built map here");
+  projectNodes();
+  const R = { kind: "roads", mode, tier: `every street (pre-loaded ${region.name} map)`, src: [], flood: [], snapWarn: [] };
+  for (const p of people) {
+    const sn = snapNode(p.lat, p.lon);
+    R.src.push(sn);
+    const off = hav(p.lat, p.lon, G.lat[sn], G.lon[sn]);
+    if (off > 1500) R.snapWarn.push(`${p.name} is ${(off / 1000).toFixed(1)} km from the nearest mapped road`);
+  }
+  for (let i = 0; i < people.length; i++) {
+    setStatus(`Flooding the streets from ${people[i].name} (${i + 1} of ${people.length})…`, "busy"); await tick();
+    const d = dijkstra(R.src[i]);
+    const keys = new Float64Array(G.S);
+    for (let k = 0; k < G.S; k++) keys[k] = Math.min(d.dist[G.sA[k]], d.dist[G.sB[k]]);
+    R.flood.push({ ...d, ...sortedOrder(keys) });
+  }
+  setStatus("Finding where the floods meet…", "busy"); await tick();
+  const allKeys = new Float64Array(G.S), owner = new Uint8Array(G.S);
+  for (let k = 0; k < G.S; k++) {
+    let bk = Infinity, bo = 0;
+    for (let i = 0; i < R.flood.length; i++) {
+      const f = R.flood[i], v = Math.min(f.dist[G.sA[k]], f.dist[G.sB[k]]);
+      if (v < bk) { bk = v; bo = i; }
+    }
+    allKeys[k] = bk; owner[k] = bo;
+  }
+  R.all = sortedOrder(allKeys); R.owner = owner;
+  R.people = people.map((p) => ({ id: p.id, name: p.name, color: p.color, lat: p.lat, lon: p.lon }));
+  result = R;
+  if (!chooseMeetingRoads()) { result = null; throw new Error("no connecting route in the pre-built map"); }
+  setStatus("", "");
+  finishResultAndNearby();
+  play(false);
+  return true;
+}
+function chooseMeetingRoads() {
+  const R = result, F = R.flood, fair = settings.goal === "fair";
+  let best = -1, bMax = Infinity, bSum = Infinity;
+  outer: for (let v = 0; v < G.n; v++) {
+    let mx = 0, sm = 0;
+    for (let i = 0; i < F.length; i++) {
+      const d = F[i].dist[v];
+      if (d === Infinity) continue outer;
+      if (d > mx) mx = d; sm += d;
+    }
+    if (fair ? (mx < bMax - 1e-9 || (Math.abs(mx - bMax) <= 1e-9 && sm < bSum)) : (sm < bSum - 1e-9 || (Math.abs(sm - bSum) <= 1e-9 && mx < bMax))) { best = v; bMax = mx; bSum = sm; }
+  }
+  if (best < 0) return false;
+  R.goal = settings.goal;
+  R.meet = best;
+  R.meetLL = [G.lat[best], G.lon[best]];
+  R.dist = F.map((f) => ({ secs: f.dist[best], meters: f.meters[best] }));
+  R.paths = F.map((f) => {
+    const pts = []; let v = best;
+    while (v >= 0) { pts.push([G.lat[v], G.lon[v]]); v = f.pred[v]; }
+    return pts.reverse();
+  });
+  R.place = null;
+  return true;
+}
+
 async function analyze() {
+  if (busy || people.length < 2) return;
+  const region = regionFor(people);
+  if (region) {
+    stopAnim(); clearRoutes(); busy = true; renderList();
+    let ok = false;
+    try { ok = await analyzeLocal(region); }
+    catch (e) { console.warn("Pre-built map unavailable, using the routing service instead:", e); result = null; G = null; }
+    finally { busy = false; renderList(); }
+    if (ok) return;
+  }
+  return analyzeGrid();
+}
+
+async function analyzeGrid() {
   if (busy || people.length < 2) return;
   stopAnim(); clearRoutes();
   const mode = settings.mode;
@@ -692,7 +902,8 @@ async function analyze() {
       cells,
     };
     projectNodes();
-    const R = { mode, tier: "the road network from OpenStreetMap", flood: [], snapWarn: [], cells };
+    G.kind = "grid";
+    const R = { kind: "grid", mode, tier: "the road network from OpenStreetMap", flood: [], snapWarn: [], cells };
     for (let i = 0; i < people.length; i++) {
       const keys = new Float64Array(cells.length);
       cells.forEach((c, k) => { keys[k] = c.t[i]; });
@@ -820,7 +1031,7 @@ function setStatus(msg, kind) {
   el.innerHTML = (kind === "busy" ? '<span class="spin"></span>' : "") + `<span>${escapeHtml(msg)}</span>`;
 }
 function setHud(h, s, color, count) {
-  $("hud-h").innerHTML = escapeHtml(h) + (count != null ? `<span class="n">· ${count.toLocaleString()} <small>spots</small></span>` : "");
+  $("hud-h").innerHTML = escapeHtml(h) + (count != null ? `<span class="n">· ${count.toLocaleString()} <small>${result && result.kind === "roads" ? "roads" : "spots"}</small></span>` : "");
   $("hud-h").style.setProperty("--hc", color || "var(--accent)");
   $("hud-s").textContent = s || "";
 }
@@ -858,14 +1069,40 @@ function fillCells(c, list, from, to, colorOf, alphaOf) {
     c.fillRect(G.px[i] - w / 2 + gap / 2, G.py[i] - h / 2 + gap / 2, w - gap, h - gap);
   }
 }
+function lineW() { const z = map.getZoom(); return Math.max(0.55, Math.min(2.4, (z - 9.5) * 0.42)); }
+function strokeSegs(c, list, from, to, color, alpha, width) {
+  if (to <= from) return;
+  c.strokeStyle = color; c.globalAlpha = alpha; c.lineWidth = width;
+  const { px, py, sA, sB } = G;
+  let k = from;
+  while (k < to) {
+    const end = Math.min(to, k + 8000);
+    c.beginPath();
+    for (; k < end; k++) { const s = list ? list[k] : k; c.moveTo(px[sA[s]], py[sA[s]]); c.lineTo(px[sB[s]], py[sB[s]]); }
+    c.stroke();
+  }
+}
+function strokeOwned(c, from, to, alpha, width) {
+  if (to <= from) return;
+  const { px, py, sA, sB } = G, order = result.all.order, owner = result.owner;
+  const paths = result.people.map(() => new Path2D());
+  for (let k = from; k < to; k++) { const s = order[k], p = paths[owner[s]]; p.moveTo(px[sA[s]], py[sA[s]]); p.lineTo(px[sB[s]], py[sB[s]]); }
+  c.globalAlpha = alpha; c.lineWidth = width;
+  paths.forEach((p, i) => { c.strokeStyle = result.people[i].color; c.stroke(p); });
+}
 function drawBase(c) {
   c.globalCompositeOperation = "source-over";
   c.clearRect(0, 0, flood._size.x, flood._size.y);
+  if (G && G.kind === "roads") strokeSegs(c, null, 0, G.S, "#2a4a3c", 0.8, lineW() * 0.8);
 }
 function drawRange(from, to) {
   const c = ctx(); if (!c || !G || !result) return;
   c.globalCompositeOperation = "lighter";
-  if (anim.phase === "solo") {
+  if (G.kind === "roads") {
+    const w = lineW();
+    if (anim.phase === "solo") strokeSegs(c, result.flood[anim.person].order, from, to, result.people[anim.person].color, 0.85, w);
+    else if (anim.phase !== "idle") strokeOwned(c, from, to, anim.phase === "all" ? 0.85 : 0.42, w);
+  } else if (anim.phase === "solo") {
     const i = anim.person, f = result.flood[i], col = result.people[i].color, max = f.keys[f.keys.length - 1] || 1;
     fillCells(c, f.order, from, to, () => col, (k) => 0.5 - 0.32 * (G.cells[k].t[i] / max));
   } else if (anim.phase !== "idle") {
