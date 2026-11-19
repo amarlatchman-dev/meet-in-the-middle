@@ -9,7 +9,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "tools/build_region.py"
+      - "tools/**"
       - ".github/workflows/build-maps.yml"
 
 permissions:
@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
@@ -36,14 +36,25 @@ jobs:
           sudo apt-get install -y -q osmium-tool
           pip install osmium
 
-      - name: Download Ontario from Geofabrik
-        run: curl -fL --retry 3 -o ontario.osm.pbf https://download.geofabrik.de/north-america/canada/ontario-latest.osm.pbf
-
-      - name: Cut out the Greater Toronto Area (Niagara to Oshawa)
+      - name: Download road data
         run: |
-          # bbox order for osmium is W,S,E,N
-          osmium extract -b -80.25,42.85,-78.65,44.15 ontario.osm.pbf -o gta.osm.pbf
-          osmium tags-filter gta.osm.pbf w/highway -o gta-roads.osm.pbf
+          # Primary: Geofabrik's Ontario extract. Retry, since it can be briefly unreachable.
+          ok=0
+          for i in 1 2 3 4 5; do
+            if curl -fL --connect-timeout 30 -o ontario.osm.pbf https://download.geofabrik.de/north-america/canada/ontario-latest.osm.pbf; then ok=1; break; fi
+            echo "Geofabrik attempt $i failed; waiting"; sleep $((i * 30))
+          done
+          if [ "$ok" = 1 ]; then
+            # bbox order for osmium is W,S,E,N
+            osmium extract -b -80.25,42.85,-78.65,44.15 ontario.osm.pbf -o gta.osm.pbf
+            osmium tags-filter gta.osm.pbf w/highway -o gta-roads.osm.pbf
+          else
+            echo "Geofabrik unreachable; falling back to Overpass tiles"
+            python tools/fetch_overpass.py tiles --bbox 42.85,-80.25,44.15,-78.65
+            for f in tiles/*.osm; do osmium sort "$f" -o "${f%.osm}.pbf"; done
+            osmium merge tiles/*.pbf -o gta-roads.osm.pbf
+          fi
+          ls -la gta-roads.osm.pbf
 
       - name: Build data/gta.bin
         run: |
