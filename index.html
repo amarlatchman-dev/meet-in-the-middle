@@ -115,6 +115,26 @@ h1 span { color: var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Results */
+#nearby { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+#nearby .note { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--raise); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; color: var(--text); }
+.chip:hover { border-color: var(--k); }
+.chip[aria-pressed="true"] { color: var(--ink); background: var(--k); border-color: var(--k); font-weight: 600; }
+.chip.sub { font-size: 11.5px; padding: 3px 9px; }
+#nb-sub { padding-left: 10px; border-left: 2px solid var(--line); }
+.chip .ct { opacity: .7; margin-left: 5px; font-family: var(--f-mono); font-size: 11px; }
+#nb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.poi { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: start; padding: 9px 4px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 6px; }
+.poi:hover, .poi:focus-visible { background: #111a20; }
+.poi .k { width: 10px; height: 10px; border-radius: 50%; background: var(--k); box-shadow: 0 0 6px var(--k); margin-top: 5px; }
+.poi .nm { min-width: 0; }
+.poi b { font-weight: 600; display: block; }
+.poi small { color: var(--muted); font-size: 12px; display: block; }
+.poi .d { font-family: var(--f-mono); font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; display: flex; flex-direction: column; gap: 2px; }
+.poi a { color: var(--muted); font-size: 12px; font-family: var(--f-body); }
+.free-tag { color: #4fe3a8; font-weight: 600; }
+.add-tools { flex-wrap: wrap; }
 #results { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 12px; }
 .meet-name { font: 700 22px/1.1 var(--f-display); margin: 4px 0 2px; text-wrap: balance; }
 .meet-sub { color: var(--muted); font-size: 12.5px; }
@@ -197,6 +217,7 @@ tr.longest td.num:first-of-type { color: var(--accent); }
         <ul id="suggest" hidden></ul>
       </div>
       <div class="add-tools">
+        <button class="ghost" id="locate">Use my location</button>
         <button class="ghost" id="pick" aria-pressed="false">Drop a pin on the map</button>
       </div>
     </section>
@@ -228,6 +249,14 @@ tr.longest td.num:first-of-type { color: var(--accent); }
     <button id="go">Find the meeting spot</button>
     <div id="status" hidden></div>
     <section id="results" hidden></section>
+    <section id="nearby" hidden>
+      <div class="row"><span class="label">Things to do nearby</span><span class="label" id="nb-radius"></span></div>
+      <div class="chips" id="nb-filters" role="group" aria-label="Filter places"></div>
+      <div class="chips" id="nb-sub" role="group" aria-label="Cuisine and diet" hidden></div>
+      <p class="note" id="nb-hint"></p>
+      <div id="nb-status" class="note"></div>
+      <ul id="nb-list"></ul>
+    </section>
   </aside>
 
   <main id="mapwrap">
@@ -404,6 +433,7 @@ function renderList() {
   $("q").disabled = people.length >= MAX_PEOPLE;
   $("q").placeholder = people.length >= MAX_PEOPLE ? "That's 10, the maximum" : "Search an address or place";
   $("pick").disabled = people.length >= MAX_PEOPLE;
+  $("locate").disabled = people.length >= MAX_PEOPLE || locating;
   if (!result && !anim.running) setHud(people.length >= 2 ? `Where should ${people.length} friends meet?` : "Add at least two people", "");
 }
 function refresh() { renderList(); syncMarkers(); save(); }
@@ -429,7 +459,7 @@ function bindSeg(id, key) {
     if (settings[key] === b.dataset.v) return;
     settings[key] = b.dataset.v; paint(); save();
     if (key === "mode") invalidate();
-    else if (result && G) { chooseMeeting(); finishResult(); play(true); }
+    else if (result && G) { chooseMeeting(); finishResultAndNearby(); play(true); }
     goalHint();
   });
   paint();
@@ -759,7 +789,7 @@ async function analyze() {
     result = R;
     if (!chooseMeeting()) throw new Error("There's no road route that connects everyone. Check that every pin is on the same landmass, or try Car mode.");
     setStatus("", "");
-    finishResult();
+    finishResultAndNearby();
     play(false);
   } catch (e) {
     result = null;
@@ -806,6 +836,12 @@ async function finishResult() {
   R.place = place && place.main ? place : { main: `${lat.toFixed(4)}, ${lon.toFixed(4)}`, area: "" };
   renderResults();
   if (anim.phase === "done") showMeetMarker();
+}
+async function finishResultAndNearby() {
+  const R = result;
+  const p = finishResult();
+  loadNearby(R);
+  await p;
 }
 
 /* ---------------- results panel ---------------- */
@@ -869,6 +905,7 @@ function invalidate() {
   if (!result && !G) return;
   stopAnim(); result = null; G = null; clearRoutes(); redrawFull();
   $("results").hidden = true; $("replay").hidden = true; setStatus("", "");
+  clearNearby();
 }
 
 /* ---------------- drawing ---------------- */
@@ -1018,6 +1055,191 @@ function showMeetMarker() {
   }).addTo(map);
   meetMarker.bindTooltip(escapeHtml(result.place ? result.place.main : "Meet here"), { permanent: true, direction: "bottom", offset: [0, 6], className: "meet-tag" });
 }
+/* ---------------- my location ---------------- */
+let locating = false;
+$("locate").addEventListener("click", () => {
+  if (!navigator.geolocation) return setStatus("This browser can't share your location. Search your address instead.", "err");
+  const b = $("locate");
+  locating = true; b.disabled = true; b.textContent = "Finding you…";
+  const done = () => { locating = false; b.textContent = "Use my location"; renderList(); };
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    done();
+    const p = addPerson(pos.coords.latitude, pos.coords.longitude, "My location");
+    if (!p) return;
+    p.name = "Me"; refresh();
+    const l = await reverseLabel(p.lat, p.lon);
+    if (l) { p.label = "My location · " + l; refresh(); }
+  }, (err) => {
+    done();
+    setStatus(err.code === 1
+      ? "Location access was blocked. Allow it in your browser's site settings, or search your address instead."
+      : "Couldn't find your location. Search your address instead.", "err");
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+});
+
+/* ---------------- things to do nearby ---------------- */
+const FREE_HINT = "Parks, gardens, libraries, malls, markets, community centres and viewpoints: places you can hang out without paying.";
+function isFree(t) {
+  if (t.fee === "yes") return false;
+  return /^(park|garden|playground|nature_reserve|dog_park|common)$/.test(t.leisure || "")
+    || /^(library|marketplace|community_centre|fountain)$/.test(t.amenity || "")
+    || t.shop === "mall" || t.tourism === "viewpoint"
+    || (/^(museum|gallery|attraction)$/.test(t.tourism || "") && t.fee === "no");
+}
+const CATS = [
+  { id: "all", label: "All", color: "#e6eef2" },
+  { id: "food", label: "All food & drink", color: "#ff8c3a", food: true, group: true, test: (t) => /^(restaurant|fast_food|food_court|cafe|ice_cream|bar|pub|biergarten)$/.test(t.amenity || "") || /^(bakery|pastry|confectionery|chocolate)$/.test(t.shop || "") },
+  { id: "restaurant", label: "Restaurants", color: "#ff8c3a", food: true, test: (t) => t.amenity === "restaurant" },
+  { id: "fastfood", label: "Fast food", color: "#ff5c84", food: true, test: (t) => /^(fast_food|food_court)$/.test(t.amenity || "") },
+  { id: "cafe", label: "Cafés", color: "#ffcf3f", food: true, test: (t) => t.amenity === "cafe" },
+  { id: "dessert", label: "Dessert & bakeries", color: "#ffb3d9", food: true, test: (t) => t.amenity === "ice_cream" || /^(bakery|pastry|confectionery|chocolate)$/.test(t.shop || "") },
+  { id: "bars", label: "Bars & pubs", color: "#d06bff", food: true, test: (t) => /^(bar|pub|biergarten)$/.test(t.amenity || "") },
+  { id: "activity", label: "Activities", color: "#55b8ff", test: (t) => /^(cinema|theatre|arts_centre)$/.test(t.amenity || "") || /^(bowling_alley|escape_game|amusement_arcade|miniature_golf|trampoline_park|sports_centre|ice_rink|water_park|climbing)$/.test(t.leisure || "") || /^(museum|gallery|zoo|aquarium|theme_park|attraction)$/.test(t.tourism || "") },
+  { id: "outdoors", label: "Parks & outdoors", color: "#b8f24a", test: (t) => /^(park|garden|nature_reserve|dog_park|playground|common)$/.test(t.leisure || "") || t.tourism === "viewpoint" },
+  { id: "shopping", label: "Shopping", color: "#ff6fd2", test: (t) => /^(mall|department_store)$/.test(t.shop || "") || t.amenity === "marketplace" },
+  { id: "free", label: "Free", color: "#4fe3a8", test: isFree },
+];
+let nearby = null, nbFilter = "all", nbSub = "";
+const DIETS = [
+  { id: "diet:vegetarian", label: "Vegetarian options", test: (t) => /^(yes|only)$/.test(t["diet:vegetarian"] || "") || /^(yes|only)$/.test(t["diet:vegan"] || "") || /vegetarian|vegan/.test(t.cuisine || "") },
+  { id: "diet:vegan", label: "Vegan options", test: (t) => /^(yes|only)$/.test(t["diet:vegan"] || "") || /vegan/.test(t.cuisine || "") },
+  { id: "diet:halal", label: "Halal", test: (t) => /^(yes|only)$/.test(t["diet:halal"] || "") },
+];
+function cuisines(t) { return (t.cuisine || "").toLowerCase().split(/[;,]/).map((c) => c.trim()).filter(Boolean); }
+function subMatch(p, sub) {
+  if (!sub) return true;
+  const d = DIETS.find((x) => x.id === sub);
+  return d ? d.test(p.tags) : cuisines(p.tags).includes(sub);
+}
+const poiLayer = L.layerGroup().addTo(map);
+
+function nearbyQuery(lat, lon, r) {
+  const A = `(around:${r},${lat.toFixed(5)},${lon.toFixed(5)})`;
+  return `[out:json][timeout:40];(
+nwr${A}["amenity"~"^(restaurant|fast_food|food_court|cafe|ice_cream|bar|pub|biergarten|cinema|theatre|arts_centre|library|marketplace|community_centre)$"]["name"];
+nwr${A}["shop"~"^(bakery|pastry|confectionery|chocolate|mall|department_store)$"]["name"];
+nwr${A}["leisure"~"^(park|garden|nature_reserve|dog_park|common|bowling_alley|escape_game|amusement_arcade|miniature_golf|trampoline_park|sports_centre|ice_rink|water_park|climbing)$"]["name"];
+nwr${A}["tourism"~"^(museum|gallery|zoo|aquarium|theme_park|attraction|viewpoint)$"]["name"];
+);out center tags qt 500;`;
+}
+async function fetchOverpass(q) {
+  let last;
+  for (const url of OVERPASS) {
+    try {
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      if (!r.ok) throw new Error(`server said ${r.status}`);
+      const j = await r.json();
+      if (j.remark && /error|timed out/i.test(j.remark)) throw new Error(j.remark);
+      return j.elements || [];
+    } catch (e) { last = e; }
+  }
+  throw last;
+}
+function pretty(v) { return v ? (v[0].toUpperCase() + v.slice(1)).replace(/_/g, " ") : ""; }
+function poiKind(t) {
+  const base = pretty(t.amenity || t.shop || t.leisure || t.tourism);
+  const cuisine = t.cuisine ? t.cuisine.split(";").slice(0, 2).map(pretty).join(", ") : "";
+  return cuisine ? `${base} · ${cuisine}` : base;
+}
+function clearNearby() { nearby = null; poiLayer.clearLayers(); $("nearby").hidden = true; }
+
+async function loadNearby(R) {
+  clearNearby();
+  const lat = G.lat[R.meet], lon = G.lon[R.meet];
+  $("nearby").hidden = false;
+  $("nb-filters").textContent = ""; $("nb-list").textContent = ""; $("nb-hint").textContent = "";
+  $("nb-status").innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-2px;margin-right:8px"></span>Looking for places near the meeting spot…';
+  const radii = R.mode === "walk" ? [700, 1500] : [1200, 3000];
+  let els = [], used = radii[0];
+  try {
+    for (const r of radii) {
+      used = r;
+      els = await fetchOverpass(nearbyQuery(lat, lon, r));
+      if (result !== R) return;
+      if (els.length >= 12) break;
+    }
+  } catch (e) {
+    if (result !== R) return;
+    $("nb-status").textContent = "Couldn't load nearby places right now. The free map servers may be busy; try Replay later, or use the Cafés nearby link above.";
+    return;
+  }
+  const seen = new Set();
+  const list = [];
+  for (const el of els) {
+    const t = el.tags || {};
+    const plat = el.lat != null ? el.lat : el.center && el.center.lat, plon = el.lon != null ? el.lon : el.center && el.center.lon;
+    if (plat == null || !t.name) continue;
+    const key = t.name.toLowerCase() + "|" + Math.round(plat * 2000) + "|" + Math.round(plon * 2000);
+    if (seen.has(key)) continue; seen.add(key);
+    const cats = CATS.filter((c) => c.test && c.test(t)).map((c) => c.id);
+    if (!cats.length) continue;
+    const main = CATS.find((c) => c.id === cats.find((id) => id !== "free" && id !== "food")) || CATS.find((c) => c.id === "free");
+    list.push({ name: t.name, lat: plat, lon: plon, tags: t, cats, color: main.color, free: cats.includes("free"), d: hav(lat, lon, plat, plon) });
+  }
+  list.sort((a, b) => a.d - b.d);
+  nearby = { list, radius: used, R };
+  $("nb-radius").textContent = `within ${fmtKm(used)}`;
+  if (!CATS.some((c) => c.id === nbFilter)) nbFilter = "all";
+  renderNearby();
+}
+function renderNearby() {
+  if (!nearby) return;
+  const { list } = nearby;
+  const box = $("nb-filters"); box.textContent = "";
+  for (const c of CATS) {
+    const n = c.id === "all" ? list.length : list.filter((p) => p.cats.includes(c.id)).length;
+    if (c.id !== "all" && c.id !== "free" && !n) continue;
+    const b = document.createElement("button");
+    b.className = "chip"; b.style.setProperty("--k", c.color);
+    b.setAttribute("aria-pressed", c.id === nbFilter);
+    b.innerHTML = `${escapeHtml(c.label)}<span class="ct">${n}</span>`;
+    b.addEventListener("click", () => { nbFilter = c.id; nbSub = ""; renderNearby(); });
+    box.appendChild(b);
+  }
+  // second row: cuisine and diet filters for food categories
+  const sub = $("nb-sub"); sub.textContent = "";
+  const cat = CATS.find((c) => c.id === nbFilter);
+  const base = nbFilter === "all" ? list : list.filter((p) => p.cats.includes(nbFilter));
+  if (cat && cat.food) {
+    const counts = new Map();
+    base.forEach((p) => cuisines(p.tags).forEach((c) => counts.set(c, (counts.get(c) || 0) + 1)));
+    const opts = [{ id: "", label: "Any", n: base.length }]
+      .concat(DIETS.map((d) => ({ id: d.id, label: d.label, n: base.filter((p) => d.test(p.tags)).length })).filter((o) => o.n))
+      .concat([...counts].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([c, n]) => ({ id: c, label: pretty(c), n })));
+    if (opts.length > 1) {
+      for (const o of opts) {
+        const b = document.createElement("button");
+        b.className = "chip sub"; b.style.setProperty("--k", cat.color);
+        b.setAttribute("aria-pressed", o.id === nbSub);
+        b.innerHTML = `${escapeHtml(o.label)}<span class="ct">${o.n}</span>`;
+        b.addEventListener("click", () => { nbSub = o.id; renderNearby(); });
+        sub.appendChild(b);
+      }
+    }
+  }
+  sub.hidden = !sub.childElementCount;
+  $("nb-hint").textContent = nbFilter === "free" ? FREE_HINT : "";
+  const shown = base.filter((p) => subMatch(p, nbSub)).slice(0, 40);
+  $("nb-status").textContent = shown.length ? "" : (nbFilter === "free" ? "No free public spaces found close by. Try a different filter." : "Nothing found close to the meeting spot.");
+  const ul = $("nb-list"); ul.textContent = "";
+  poiLayer.clearLayers();
+  for (const p of shown) {
+    const m = L.circleMarker([p.lat, p.lon], { radius: 6, color: p.color, weight: 2, fillColor: p.color, fillOpacity: 0.55, pane: "markerPane" })
+      .bindTooltip(escapeHtml(p.name), { direction: "top", offset: [0, -6] }).addTo(poiLayer);
+    const li = document.createElement("li");
+    li.className = "poi"; li.tabIndex = 0; li.style.setProperty("--k", p.color);
+    const hours = p.tags.opening_hours ? `<small>${escapeHtml(p.tags.opening_hours.slice(0, 60))}</small>` : "";
+    const gq = encodeURIComponent(`${p.name} ${p.lat.toFixed(5)},${p.lon.toFixed(5)}`);
+    li.innerHTML = `<span class="k"></span>
+      <div class="nm"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(poiKind(p.tags))}${p.free ? ' · <span class="free-tag">Free</span>' : ""}</small>${hours}</div>
+      <div class="d"><span>${fmtKm(p.d)}</span><a href="https://www.google.com/maps/search/?api=1&query=${gq}" target="_blank" rel="noopener">Map</a></div>`;
+    const focus = () => { map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), 16), { duration: 0.8 }); m.openTooltip(); };
+    li.addEventListener("click", (e) => { if (!e.target.closest("a")) focus(); });
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter") focus(); });
+    ul.appendChild(li);
+  }
+}
+
 $("replay").addEventListener("click", () => { if (result) play(false); });
 $("go").addEventListener("click", analyze);
 
