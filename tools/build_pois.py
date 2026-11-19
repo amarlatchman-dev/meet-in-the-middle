@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build pre-loaded "things to do nearby" tiles for Meet in the Middle.
 
-Usage: build_pois.py INPUT.osm.pbf OUT_DIR --bbox S,W,N,E [--step 0.5]
+Usage: build_pois.py INPUT.osm.pbf OUT_DIR [--bbox S,W,N,E] [--step 0.5]
 
 Reads named places (food, drink, activities, parks, libraries, malls...) from
 an OSM extract and writes OUT_DIR/pois/manifest.json plus one JSON tile per
@@ -10,6 +10,7 @@ their nodes; relations (a few very large parks) are skipped.
 """
 import argparse
 import datetime
+import math
 import json
 import os
 import sys
@@ -68,23 +69,30 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input")
     ap.add_argument("out_dir")
-    ap.add_argument("--bbox", required=True)
+    ap.add_argument("--bbox", help="S,W,N,E (default: whole file)")
     ap.add_argument("--step", type=float, default=0.5)
     a = ap.parse_args()
-    s, w, n, e = (float(x) for x in a.bbox.split(","))
     h = Places()
     h.apply_file(a.input, locations=True, idx="flex_mem")
+    if a.bbox:
+        s, w, n, e = (float(x) for x in a.bbox.split(","))
+    elif h.items:
+        s, n = min(i[0] for i in h.items), max(i[0] for i in h.items)
+        w, e = min(i[1] for i in h.items), max(i[1] for i in h.items)
+    else:
+        s = w = n = e = 0.0
+    s0, w0 = math.floor(s / a.step) * a.step, math.floor(w / a.step) * a.step
 
     buckets = {}
     for la, lo, name, tags in h.items:
         if not (s <= la <= n and w <= lo <= e):
             continue
-        r, c = int((la - s) // a.step), int((lo - w) // a.step)
+        r, c = int((la - s0) // a.step), int((lo - w0) // a.step)
         buckets.setdefault((r, c), []).append([round(la, 6), round(lo, 6), name, tags])
 
     out = os.path.join(a.out_dir, "pois")
     os.makedirs(out, exist_ok=True)
-    manifest = {"version": 1, "step": a.step, "bbox": [s, w, n, e],
+    manifest = {"version": 1, "step": a.step, "bbox": [round(v, 5) for v in (s, w, n, e)],
                 "built": datetime.date.today().isoformat(), "tiles": []}
     total = 0
     for (r, c), items in sorted(buckets.items()):
@@ -96,8 +104,8 @@ def main():
         total += size
         manifest["tiles"].append({
             "file": "pois/" + name, "bytes": size, "count": len(items),
-            "bbox": [round(s + r * a.step, 4), round(w + c * a.step, 4),
-                     round(s + (r + 1) * a.step, 4), round(w + (c + 1) * a.step, 4)],
+            "bbox": [round(s0 + r * a.step, 4), round(w0 + c * a.step, 4),
+                     round(s0 + (r + 1) * a.step, 4), round(w0 + (c + 1) * a.step, 4)],
         })
     with open(os.path.join(out, "manifest.json"), "w") as f:
         json.dump(manifest, f, separators=(",", ":"))

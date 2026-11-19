@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Build a compact road-network file for Meet in the Middle from an OSM extract.
 
-Usage: build_region.py INPUT.osm.pbf OUT_DIR --bbox S,W,N,E [--step 0.5] [--name NAME]
+Usage: build_region.py INPUT.osm.pbf OUT_DIR [--bbox S,W,N,E] [--step 0.5] [--name NAME]
+
+Without --bbox, the whole input file is used.
 
 Writes OUT_DIR/manifest.json plus one tile file per --step degree square
 (OUT_DIR/tiles/<row>_<col>.bin). Each segment goes in the tile of its first
@@ -113,7 +115,7 @@ def simplify(pts):
 class Roads(osmium.SimpleHandler):
     def __init__(self, bbox):
         super().__init__()
-        self.s, self.w, self.n, self.e = bbox
+        self.s, self.w, self.n, self.e = bbox if bbox else (None, None, None, None)
         self.ways = []  # (refs, coords, cls, oneway, speed)
         self.use = {}
 
@@ -133,7 +135,7 @@ class Roads(osmium.SimpleHandler):
             coords.append((lat, lon))
         if len(refs) < 2:
             return
-        if not any(self.s <= la <= self.n and self.w <= lo <= self.e for la, lo in coords):
+        if self.s is not None and not any(self.s <= la <= self.n and self.w <= lo <= self.e for la, lo in coords):
             return
         tags = {"oneway": t.get("oneway"), "junction": t.get("junction"), "highway": hw}
         self.ways.append((refs, coords, CLASS_IDX[hw], oneway_dir(tags), parse_speed(t.get("maxspeed"))))
@@ -145,11 +147,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input")
     ap.add_argument("out_dir")
-    ap.add_argument("--bbox", required=True, help="S,W,N,E")
+    ap.add_argument("--bbox", help="S,W,N,E (default: whole file)")
     ap.add_argument("--step", type=float, default=0.5, help="tile size in degrees")
     ap.add_argument("--name", default="Southern Ontario")
     a = ap.parse_args()
-    bbox = [float(x) for x in a.bbox.split(",")]
+    bbox = [float(x) for x in a.bbox.split(",")] if a.bbox else None
 
     h = Roads(bbox)
     h.apply_file(a.input, locations=True, idx="flex_mem")
@@ -196,7 +198,12 @@ def main():
                 start = k
 
     step = a.step
-    s0, w0 = bbox[0], bbox[1]
+    if not lat:
+        sys.exit("no roads found")
+    if bbox is None:
+        bbox = [min(lat) / 1e6, min(lon) / 1e6, max(lat) / 1e6, max(lon) / 1e6]
+    # align tiles to a global grid so neighbouring regions line up
+    s0, w0 = math.floor(bbox[0] / step) * step, math.floor(bbox[1] / step) * step
     buckets = {}
     for k in range(len(A)):
         r = int((lat[A[k]] / 1e6 - s0) // step)
@@ -205,7 +212,7 @@ def main():
 
     os.makedirs(os.path.join(a.out_dir, "tiles"), exist_ok=True)
     manifest = {
-        "version": 1, "name": a.name, "step": step, "bbox": bbox,
+        "version": 1, "name": a.name, "step": step, "bbox": [round(v, 5) for v in bbox],
         "built": datetime.date.today().isoformat(), "tiles": [],
     }
     total_bytes = 0

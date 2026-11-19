@@ -10,10 +10,10 @@ Open `index.html` in a browser, or use the GitHub Pages link.
 
 ## Pre-loaded road maps
 
-When everyone is inside the pre-built area, the app reads `data/manifest.json`, downloads only the road tiles around the group (each tile is 0.5° square, about 50 km), and runs the whole street-by-street flood in the browser, with no live servers needed. Outside that area it falls back to the free OSRM routing service.
+When everyone is inside a pre-built region, the app downloads only the road tiles around the group (each tile is 0.5° square, about 50 km) and runs the whole street-by-street flood in the browser, with no live servers needed. Nearby places come from pre-built tiles too. Outside the covered regions it falls back to the free OSRM routing service and Overpass.
 
-Current coverage: **Southern Ontario**, from Windsor to Ottawa and Cornwall, north to about Muskoka (41.6–45.7°N, 83.2–74.3°W).
-
-The `Build road maps` GitHub Action (`.github/workflows/build-maps.yml`) downloads Ontario from Geofabrik, falling back to tiled Overpass downloads if Geofabrik is unreachable. It runs `tools/build_region.py`, which writes the tiles and manifest into `data/`. It runs monthly, or on demand from the Actions tab.
+- **Regions:** `tools/regions.json` lists 40 states and provinces covering the top North American metros (Toronto, Montreal, Vancouver, Calgary, New York, Los Angeles, Chicago, Dallas, Houston, and more).
+- **Build:** the `Build road maps` GitHub Action builds every region in parallel (`tools/build_region.py` for roads, `tools/build_pois.py` for places), then `tools/make_index.py` writes `index.json`. It runs monthly, or on demand from the Actions tab, optionally limited to a few region ids.
+- **Hosting:** tiles are hosted on Cloudflare R2; see [docs/R2_SETUP.md](docs/R2_SETUP.md). Until `TILE_BASE` is set in `index.html`, the app uses the Southern Ontario tiles committed in `data/`.
 
 Map data © OpenStreetMap contributors (ODbL).

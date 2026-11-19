@@ -665,12 +665,33 @@ const tick = () => new Promise((r) => setTimeout(r, 16));
 /* ---------------- pre-built regional road maps ---------------- */
 // Built by tools/build_region.py via the "Build road maps" GitHub Action:
 // data/manifest.json lists road tiles; only the tiles around the group are downloaded.
-let manifestP = null;
-const tileCache = {};
-function loadManifest() {
-  if (!manifestP) manifestP = fetch("data/manifest.json").then((r) => { if (!r.ok) throw new Error("no pre-built maps"); return r.json(); })
-    .catch((e) => { manifestP = null; throw e; });
-  return manifestP;
+// Where pre-built map tiles live: the public Cloudflare R2 URL, ending in "/".
+// Leave empty to use the Southern Ontario tiles committed in this repo (data/).
+const TILE_BASE = "";
+
+let coverageP = null;
+const manifestCache = {}, tileCache = {};
+function getJSON(url) { return fetch(url).then((r) => { if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); }); }
+// -> [{ id, name, bbox, built, base, roads, pois }] (roads/pois are manifest URLs)
+function loadCoverage() {
+  if (!coverageP) {
+    coverageP = (async () => {
+      if (TILE_BASE) {
+        try {
+          const idx = await getJSON(TILE_BASE + "index.json");
+          return idx.regions.map((r) => ({ ...r, base: TILE_BASE + r.id + "/", roads: TILE_BASE + r.roads, pois: r.pois ? TILE_BASE + r.pois : null }));
+        } catch (e) { console.warn("Tile index unavailable, using repo tiles:", e); }
+      }
+      const m = await getJSON("data/manifest.json");
+      manifestCache["data/manifest.json"] = m;
+      return [{ id: "repo", name: m.name, bbox: m.bbox, built: m.built, base: "data/", roads: "data/manifest.json", pois: "data/pois/manifest.json" }];
+    })().catch((e) => { coverageP = null; throw e; });
+  }
+  return coverageP;
+}
+function loadManifest(url) {
+  if (!manifestCache[url]) manifestCache[url] = getJSON(url).catch((e) => { delete manifestCache[url]; throw e; });
+  return Promise.resolve(manifestCache[url]);
 }
 function inBox(b, la, lo) { return la >= b[0] && la <= b[2] && lo >= b[1] && lo <= b[3]; }
 function boxesOverlap(a, b) { return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]; }
@@ -701,21 +722,22 @@ function parseTile(buf) {
   D.cls = take(Uint8Array, E, 1); D.ow = take(Int8Array, E, 1); D.spd = take(Uint8Array, E, 1);
   return D;
 }
+// tiles: [{ url, bytes }]
 async function loadTiles(tiles, onProgress) {
-  const total = tiles.reduce((t, x) => t + (tileCache[x.file] ? 0 : x.bytes), 0);
+  const total = tiles.reduce((t, x) => t + (tileCache[x.url] ? 0 : x.bytes), 0);
   let got = 0;
   return Promise.all(tiles.map((t) => {
-    if (!tileCache[t.file]) {
-      tileCache[t.file] = fetchBytes(t.file.startsWith("data/") ? t.file : "data/" + t.file, (n) => { got += n; onProgress(got, total); })
-        .then(parseTile).catch((e) => { delete tileCache[t.file]; throw e; });
+    if (!tileCache[t.url]) {
+      tileCache[t.url] = fetchBytes(t.url, (n) => { got += n; onProgress(got, total); })
+        .then(parseTile).catch((e) => { delete tileCache[t.url]; throw e; });
     }
-    return tileCache[t.file];
+    return tileCache[t.url];
   }));
 }
 const CLASS_KMH = [100, 80, 60, 50, 45, 40, 30, 10, 60, 50, 45, 40, 35, 5];
 function buildLocalGraph(tiles, bbox, mode) {
   const [s, w, n, e] = bbox.map((v) => Math.round(v * 1e6));
-  const merged = new Map();
+  const merged = new Map(), seenSeg = new Set();
   const lat = [], lon = [], sA = [], sB = [], eF = [], eT = [], eC = [], eL = [];
   for (const D of tiles) {
     const local = new Int32Array(D.N).fill(-1);
@@ -736,6 +758,11 @@ function buildLocalGraph(tiles, bbox, mode) {
       const speed = mode === "walk" ? WALK_MS : ((D.spd[k] || CLASS_KMH[c] || 35) / 3.6) * 0.8;
       const ow = mode === "walk" ? 0 : D.ow[k];
       const la = L(a), lb = L(b), d = D.len[k], cost = d / speed;
+      if (tiles.length > 1) {
+        const key = la < lb ? la * 67108864 + lb : lb * 67108864 + la;
+        if (seenSeg.has(key)) continue;
+        seenSeg.add(key);
+      }
       sA.push(la); sB.push(lb);
       if (ow >= 0) { eF.push(la); eT.push(lb); eC.push(cost); eL.push(d); }
       if (ow <= 0) { eF.push(lb); eT.push(la); eC.push(cost); eL.push(d); }
@@ -803,15 +830,19 @@ function dijkstra(src) {
   }
   return { dist, meters, pred };
 }
-async function analyzeLocal(M) {
+async function analyzeLocal(regions) {
   const mode = settings.mode;
   let s = 90, w = 180, n = -90, e = -180;
   for (const p of people) { s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lon); e = Math.max(e, p.lon); }
   const kx = Math.cos(((s + n) / 2) * Math.PI / 180);
   const padLat = Math.max((n - s) * 0.15, 0.02), padLon = Math.max((e - w) * 0.15, 0.02 / kx);
   const box = [s - padLat, w - padLon, n + padLat, e + padLon];
-  const need = M.tiles.filter((t) => boxesOverlap(t.bbox, box));
+  const use = regions.filter((r) => boxesOverlap(r.bbox, box));
+  const manifests = await Promise.all(use.map((r) => loadManifest(r.roads)));
+  const need = [];
+  manifests.forEach((m, i) => m.tiles.forEach((t) => { if (boxesOverlap(t.bbox, box)) need.push({ url: use[i].base + t.file, bytes: t.bytes }); }));
   if (!need.length) throw new Error("no map tiles here");
+  const M = { name: use.map((r) => r.name).join(" + "), built: use.map((r) => r.built).sort()[0] };
   const mb = need.reduce((t, x) => t + x.bytes, 0) / 1e6;
   if (mb > 120) throw new Error("area too large for pre-built tiles");
   setStatus(`Loading the ${M.name} road map…`, "busy");
@@ -826,6 +857,7 @@ async function analyzeLocal(M) {
     const sn = snapNode(p.lat, p.lon);
     R.src.push(sn);
     const off = hav(p.lat, p.lon, G.lat[sn], G.lon[sn]);
+    if (off > 3000) throw new Error(`${p.name} is outside the pre-built map`);
     if (off > 1500) R.snapWarn.push(`${p.name} is ${(off / 1000).toFixed(1)} km from the nearest mapped road`);
   }
   for (let i = 0; i < people.length; i++) {
@@ -882,12 +914,12 @@ function chooseMeetingRoads() {
 
 async function analyze() {
   if (busy || people.length < 2) return;
-  let M = null;
-  try { M = await loadManifest(); } catch (e) { /* no pre-built maps yet */ }
-  if (M && people.every((p) => inBox(M.bbox, p.lat, p.lon))) {
+  let cov = null;
+  try { cov = await loadCoverage(); } catch (e) { /* no pre-built maps */ }
+  if (cov && people.every((p) => cov.some((r) => inBox(r.bbox, p.lat, p.lon)))) {
     stopAnim(); clearRoutes(); busy = true; renderList();
     let ok = false;
-    try { ok = await analyzeLocal(M); }
+    try { ok = await analyzeLocal(cov); }
     catch (e) { console.warn("Pre-built map unavailable, using the routing service instead:", e); result = null; G = null; }
     finally { busy = false; renderList(); }
     if (ok) return;
@@ -1321,20 +1353,21 @@ function poiKind(t) {
 function clearNearby() { nearby = null; poiLayer.clearLayers(); $("nearby").hidden = true; }
 
 // Places pre-built by tools/build_pois.py (data/pois/). Returns null when not covered.
-let poiManifestP = null;
 const poiTileCache = {};
 async function preloadedPlaces(lat, lon, radius) {
-  if (!poiManifestP) poiManifestP = fetch("data/pois/manifest.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  const M = await poiManifestP;
-  if (!M || !inBox(M.bbox, lat, lon)) return null;
+  let cov;
+  try { cov = await loadCoverage(); } catch (e) { return null; }
+  const regs = cov.filter((r) => r.pois && inBox(r.bbox, lat, lon));
+  if (!regs.length) return null;
   const dLat = radius / 111000, dLon = radius / (111000 * Math.cos(lat * Math.PI / 180));
   const box = [lat - dLat, lon - dLon, lat + dLat, lon + dLon];
-  const need = M.tiles.filter((t) => boxesOverlap(t.bbox, box));
   try {
-    const lists = await Promise.all(need.map((t) => {
-      if (!poiTileCache[t.file]) poiTileCache[t.file] = fetch("data/" + t.file).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-        .catch((e) => { delete poiTileCache[t.file]; throw e; });
-      return poiTileCache[t.file];
+    const mans = await Promise.all(regs.map((r) => loadManifest(r.pois)));
+    const urls = [];
+    mans.forEach((m, i) => m.tiles.forEach((t) => { if (boxesOverlap(t.bbox, box)) urls.push(regs[i].base + t.file); }));
+    const lists = await Promise.all(urls.map((u) => {
+      if (!poiTileCache[u]) poiTileCache[u] = getJSON(u).catch((e) => { delete poiTileCache[u]; throw e; });
+      return poiTileCache[u];
     }));
     return lists.flat().map(([la, lo, name, tags]) => ({ lat: la, lon: lo, tags: { ...tags, name } }));
   } catch (e) { return null; }
