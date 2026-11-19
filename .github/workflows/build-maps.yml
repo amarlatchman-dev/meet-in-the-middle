@@ -72,6 +72,7 @@ jobs:
       - name: Download ${{ matrix.region.name }}
         env:
           P: ${{ matrix.region.path }}
+          BBBIKE: ${{ join(matrix.region.bbbike, ' ') }}
         run: |
           # Geofabrik blocks GitHub's servers at times, so try the OpenStreetMap France mirror too.
           # Mirror folder names use underscores where Geofabrik uses hyphens.
@@ -88,6 +89,24 @@ jobs:
               sleep 15
             done
           done
+          if [ "$ok" != 1 ]; then
+            # Show what the mirror actually has, to help fix the path
+            parent="$(dirname "$U")"
+            echo "Mirror listing for $parent:"; curl -fsL "https://download.openstreetmap.fr/extracts/$parent/" | grep -o 'href="[^"]*"' | grep -i "$(basename "$U" | cut -c1-5)" | head -20 || true
+          fi
+          if [ "$ok" != 1 ] && [ -n "$BBBIKE" ]; then
+            # Fall back to BBBike's metro-area extracts and merge them
+            n=0
+            for city in $BBBIKE; do
+              echo "Trying BBBike $city"
+              if curl -fL --connect-timeout 30 --max-time 1800 -o "bb-$city.osm.pbf" "https://download.bbbike.org/osm/bbbike/$city/$city.osm.pbf"; then n=$((n+1)); else rm -f "bb-$city.osm.pbf"; fi
+            done
+            if [ "$n" -gt 0 ]; then
+              for f in bb-*.osm.pbf; do osmium sort "$f" -o "s-$f"; done
+              osmium merge s-bb-*.osm.pbf -o region.osm.pbf && ok=1
+              echo "::warning::Used BBBike metro extracts for $P ($n of them) instead of the full state"
+            fi
+          fi
           [ "$ok" = 1 ] || { echo "::error::No download source worked for $P"; exit 1; }
           ls -la region.osm.pbf
 
@@ -100,6 +119,10 @@ jobs:
             nwr/leisure=park,garden,nature_reserve,dog_park,common,bowling_alley,escape_game,amusement_arcade,miniature_golf,trampoline_park,sports_centre,ice_rink,water_park,climbing \
             nwr/tourism=museum,gallery,zoo,aquarium,theme_park,attraction,viewpoint \
             -o pois.osm.pbf
+          osmium tags-filter region.osm.pbf \
+            w/railway=subway,light_rail,tram,rail \
+            n/railway=station,halt,tram_stop n/public_transport=station,stop_position \
+            -o transit.osm.pbf
           rm region.osm.pbf
 
       - name: Build tiles
@@ -109,6 +132,7 @@ jobs:
         run: |
           python tools/build_region.py roads.osm.pbf "out/$ID" --step 0.5 --name "$NAME"
           python tools/build_pois.py pois.osm.pbf "out/$ID" --step 0.5
+          python tools/build_transit.py transit.osm.pbf "out/$ID" --step 0.5
           du -sh "out/$ID"
 
       - uses: actions/upload-artifact@v4

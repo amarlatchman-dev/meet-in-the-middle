@@ -26,9 +26,11 @@ for d in sorted(os.listdir(src)):
         m = json.load(f)
     shutil.copytree(path, os.path.join(dst, rid), dirs_exist_ok=True)
     has_pois = os.path.isfile(os.path.join(path, "pois", "manifest.json"))
+    has_transit = os.path.isfile(os.path.join(path, "transit", "manifest.json"))
     regions.append({
         "id": rid, "name": m.get("name", rid), "bbox": m["bbox"], "built": m.get("built"),
         "roads": f"{rid}/manifest.json", "pois": f"{rid}/pois/manifest.json" if has_pois else None,
+        "transit": f"{rid}/transit/manifest.json" if has_transit else None,
         "bytes": sum(t["bytes"] for t in m["tiles"]),
     })
 with open(os.path.join(dst, "index.json"), "w") as f:

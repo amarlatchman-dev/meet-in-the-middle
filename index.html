@@ -103,6 +103,19 @@ h1 span { color: var(--accent); }
 .seg button { background: none; border: 0; border-radius: 8px; padding: 7px 6px; color: var(--muted); font-size: 13px; }
 .seg button[aria-pressed="true"] { background: #24323c; color: var(--text); font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+.seg.four { grid-template-columns: repeat(4, 1fr); }
+.when-row { display: flex; gap: 8px; margin-top: 8px; }
+.when-row input { flex: 1; min-width: 0; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.invite-row { margin-top: 8px; }
+.invite-row .ghost { width: 100%; }
+.join-banner { margin-top: 8px; font-size: 12.5px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: #1b2a1f; border: 1px solid #2f5a3b; color: var(--text); }
+.toast { position: fixed; z-index: 2000; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--text); color: var(--ink); padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+.leave { color: var(--accent); }
+td small { display: block; color: var(--muted); font-size: 11px; }
+.open-toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.open-toggle input { accent-color: #4fe3a8; width: 16px; height: 16px; }
+.st-open { color: #4fe3a8; font-weight: 600; }
+.st-closed { color: var(--danger); font-weight: 600; }
 
 #go {
   width: 100%; border: 0; border-radius: 12px; padding: 13px; background: var(--accent); color: #1a1400;
@@ -228,14 +241,27 @@ tr.longest td.num:first-of-type { color: var(--accent); }
         <span class="label" id="count">0 / 10</span>
       </div>
       <ul id="people"></ul>
+      <div class="invite-row">
+        <button class="ghost" id="invite">Invite friends to add their location</button>
+      </div>
+      <div class="join-banner" id="join" hidden></div>
       <div class="example-chip" id="example" hidden>Example group in Toronto. Adding someone replaces it, or <button id="clear">clear it now</button>.</div>
     </section>
 
     <section>
       <span class="label">Travel by</span>
-      <div class="seg" id="mode">
+      <div class="seg four" id="mode">
         <button data-v="drive" aria-pressed="true">Car</button>
-        <button data-v="walk" aria-pressed="false">Walking</button>
+        <button data-v="transit" aria-pressed="false">Transit</button>
+        <button data-v="bike" aria-pressed="false">Bike</button>
+        <button data-v="walk" aria-pressed="false">Walk</button>
+      </div>
+      <p class="hint" id="mode-hint" hidden></p>
+      <div style="height:12px"></div>
+      <label class="label" for="when">When are you meeting?</label>
+      <div class="when-row">
+        <input type="datetime-local" id="when" step="300">
+        <button class="ghost" id="when-now">Now</button>
       </div>
       <div style="height:12px"></div>
       <span class="label">Pick the spot that</span>
@@ -253,6 +279,7 @@ tr.longest td.num:first-of-type { color: var(--accent); }
       <div class="row"><span class="label">Things to do nearby</span><span class="label" id="nb-radius"></span></div>
       <div class="chips" id="nb-filters" role="group" aria-label="Filter places"></div>
       <div class="chips" id="nb-sub" role="group" aria-label="Cuisine and diet" hidden></div>
+      <label class="open-toggle"><input type="checkbox" id="nb-open"> <span id="nb-open-label">Open at meeting time</span></label>
       <p class="note" id="nb-hint"></p>
       <div id="nb-status" class="note"></div>
       <ul id="nb-list"></ul>
@@ -278,6 +305,13 @@ const OVERPASS = [
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
 const WALK_MS = 4.8 / 3.6;
+const BIKE_MS = 16 / 3.6;
+const MODE_INFO = {
+  drive: { label: "driving", gmaps: "driving" },
+  transit: { label: "transit", gmaps: "transit" },
+  bike: { label: "cycling", gmaps: "bicycling" },
+  walk: { label: "walking", gmaps: "walking" },
+};
 const EXAMPLE = [
   { name: "Priya", label: "York University", lat: 43.7735, lon: -79.5019 },
   { name: "Noah", label: "Don Mills", lat: 43.7347, lon: -79.3443 },
@@ -287,7 +321,7 @@ const EXAMPLE = [
 
 /* ---------------- state ---------------- */
 let people = [];
-let settings = { mode: "drive", goal: "fair" };
+let settings = { mode: "drive", goal: "fair", when: "" };
 let isExample = false;
 let uid = 1;
 let G = null;          // road graph
@@ -461,9 +495,14 @@ function bindSeg(id, key) {
     if (key === "mode") invalidate();
     else if (result && result.kind === "roads") { chooseMeetingRoads(); finishResultAndNearby(); play(true); }
     else if (result && G && !busy) { const R = result; busy = true; renderList(); computeMeet(R).then(() => { if (result !== R) return; setStatus("", ""); finishResultAndNearby(); play(true); }).catch((e) => setStatus(e.message, "err")).finally(() => { busy = false; renderList(); }); }
-    goalHint();
+    goalHint(); modeHint();
   });
   paint();
+}
+function modeHint() {
+  const h = $("mode-hint");
+  h.hidden = settings.mode !== "transit";
+  h.textContent = "Estimated from subway, LRT, streetcar and rail lines with average waits. Buses aren't included yet.";
 }
 function goalHint() {
   $("goal-hint").textContent = settings.goal === "fair"
@@ -587,6 +626,7 @@ function hav(a1, o1, a2, o2) {
 const ROUTERS = {
   drive: ["https://routing.openstreetmap.de/routed-car", "https://router.project-osrm.org"],
   walk: ["https://routing.openstreetmap.de/routed-foot"],
+  bike: ["https://routing.openstreetmap.de/routed-bike"],
 };
 const TABLE_MAX = 90; // coordinates per table request
 let TIMEOUT_MS = 30000;
@@ -679,12 +719,14 @@ function loadCoverage() {
       if (TILE_BASE) {
         try {
           const idx = await getJSON(TILE_BASE + "index.json");
-          return idx.regions.map((r) => ({ ...r, base: TILE_BASE + r.id + "/", roads: TILE_BASE + r.roads, pois: r.pois ? TILE_BASE + r.pois : null }));
+          return idx.regions.map((r) => ({ ...r, base: TILE_BASE + r.id + "/", roads: TILE_BASE + r.roads, pois: r.pois ? TILE_BASE + r.pois : null, transit: r.transit ? TILE_BASE + r.transit : null }));
         } catch (e) { console.warn("Tile index unavailable, using repo tiles:", e); }
       }
       const m = await getJSON("data/manifest.json");
       manifestCache["data/manifest.json"] = m;
-      return [{ id: "repo", name: m.name, bbox: m.bbox, built: m.built, base: "data/", roads: "data/manifest.json", pois: "data/pois/manifest.json" }];
+      let transit = null;
+      try { await loadManifest("data/transit/manifest.json"); transit = "data/transit/manifest.json"; } catch (e) { /* no transit in repo tiles */ }
+      return [{ id: "repo", name: m.name, bbox: m.bbox, built: m.built, base: "data/", roads: "data/manifest.json", pois: "data/pois/manifest.json", transit }];
     })().catch((e) => { coverageP = null; throw e; });
   }
   return coverageP;
@@ -735,7 +777,7 @@ async function loadTiles(tiles, onProgress) {
   }));
 }
 const CLASS_KMH = [100, 80, 60, 50, 45, 40, 30, 10, 60, 50, 45, 40, 35, 5];
-function buildLocalGraph(tiles, bbox, mode) {
+function buildLocalGraph(tiles, bbox, mode, transitTiles) {
   const [s, w, n, e] = bbox.map((v) => Math.round(v * 1e6));
   const merged = new Map(), seenSeg = new Set();
   const lat = [], lon = [], sA = [], sB = [], eF = [], eT = [], eC = [], eL = [];
@@ -754,9 +796,10 @@ function buildLocalGraph(tiles, bbox, mode) {
     for (let k = 0; k < D.E; k++) {
       const a = D.a[k], b = D.b[k], c = D.cls[k];
       if (!inB(a) && !inB(b)) continue;
-      if (mode === "walk" ? (c === 0 || c === 8) : c === 13) continue;
-      const speed = mode === "walk" ? WALK_MS : ((D.spd[k] || CLASS_KMH[c] || 35) / 3.6) * 0.8;
-      const ow = mode === "walk" ? 0 : D.ow[k];
+      const onFoot = mode === "walk" || mode === "transit";
+      if (mode === "drive" ? c === 13 : (c === 0 || c === 8)) continue;
+      const speed = onFoot ? WALK_MS : mode === "bike" ? (c === 13 ? WALK_MS : BIKE_MS) : ((D.spd[k] || CLASS_KMH[c] || 35) / 3.6) * 0.8;
+      const ow = onFoot ? 0 : D.ow[k];
       const la = L(a), lb = L(b), d = D.len[k], cost = d / speed;
       if (tiles.length > 1) {
         const key = la < lb ? la * 67108864 + lb : lb * 67108864 + la;
@@ -768,6 +811,8 @@ function buildLocalGraph(tiles, bbox, mode) {
       if (ow <= 0) { eF.push(lb); eT.push(la); eC.push(cost); eL.push(d); }
     }
   }
+  const roadN = lat.length;
+  if (mode === "transit" && transitTiles) addTransit(transitTiles, bbox, lat, lon, sA, sB, eF, eT, eC, eL, roadN);
   const N = lat.length, m = eF.length;
   const off = new Uint32Array(N + 1);
   for (let k = 0; k < m; k++) off[eF[k] + 1]++;
@@ -781,15 +826,74 @@ function buildLocalGraph(tiles, bbox, mode) {
   for (let i = 0; i < N; i++) { const r = find(i); const c = (size.get(r) || 0) + 1; size.set(r, c); if (c > bestN) { bestN = c; best = r; } }
   const inMain = new Uint8Array(N); for (let i = 0; i < N; i++) inMain[i] = find(i) === best ? 1 : 0;
   return {
-    kind: "roads", n: N, lat: Float64Array.from(lat), lon: Float64Array.from(lon), off, to, cost, len, inMain,
+    kind: "roads", n: N, roadN, lat: Float64Array.from(lat), lon: Float64Array.from(lon), off, to, cost, len, inMain,
     sA: Int32Array.from(sA), sB: Int32Array.from(sB), S: sA.length,
     px: new Float32Array(N), py: new Float32Array(N),
   };
 }
+// Rapid transit: track segments joined to the walking network at stations,
+// with an average wait to board. Schedule-free estimate; buses not included.
+const T_SPEED = [9, 6.5, 4.5, 15];      // m/s: subway, light rail, streetcar, commuter rail (incl. stops)
+const T_WAIT = [240, 300, 360, 720];    // s: average wait to board
+function addTransit(tiles, bbox, lat, lon, sA, sB, eF, eT, eC, eL, roadN) {
+  const [s, w, n, e] = bbox.map((v) => Math.round(v * 1e6));
+  const pad = 20000; // keep lines a little beyond the box
+  const inB = (la, lo) => la >= s - pad && la <= n + pad && lo >= w - pad && lo <= e + pad;
+  const idx = new Map();
+  const T = (la, lo) => { const k = la + "," + lo; let i = idx.get(k); if (i === undefined) { i = lat.length; idx.set(k, i); lat.push(la / 1e6); lon.push(lo / 1e6); } return i; };
+  const segs = [], stations = [];
+  for (const t of tiles) {
+    for (const g of t.s) {
+      // keep segments whose extent overlaps the area (long straight track can cross it end to end)
+      if (Math.max(g[0], g[2]) < s - pad || Math.min(g[0], g[2]) > n + pad || Math.max(g[1], g[3]) < w - pad || Math.min(g[1], g[3]) > e + pad) continue;
+      segs.push([T(g[0], g[1]), T(g[2], g[3]), g[4]]);
+    }
+    for (const st of t.st) if (inB(st[0], st[1])) stations.push(st);
+  }
+  if (!segs.length) return;
+  const kx = Math.cos(((s + n) / 2e6) * Math.PI / 180), M = 111320;
+  for (const st of stations) {
+    const sla = st[0] / 1e6, slo = st[1] / 1e6;
+    // nearest track segment (projected), within 250 m
+    let best = -1, bd = 250, bt = 0;
+    for (let i = 0; i < segs.length; i++) {
+      const [a, b] = segs[i];
+      const ax = lon[a] * kx * M, ay = lat[a] * M, bx = lon[b] * kx * M, by = lat[b] * M, px = slo * kx * M, py = sla * M;
+      const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+      const tt = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
+      const d = Math.hypot(px - (ax + tt * dx), py - (ay + tt * dy));
+      if (d < bd) { bd = d; best = i; bt = tt; }
+    }
+    if (best < 0) continue;
+    const [a, b, cls] = segs[best];
+    let p;
+    if (bt < 0.02) p = a; else if (bt > 0.98) p = b;
+    else {
+      p = lat.length; lat.push(lat[a] + (lat[b] - lat[a]) * bt); lon.push(lon[a] + (lon[b] - lon[a]) * bt);
+      segs[best] = [a, p, cls]; segs.push([p, b, cls]);
+    }
+    // nearest street node, within 400 m
+    let wn = -1, wd = 400;
+    for (let i = 0; i < roadN; i++) {
+      const d = Math.hypot((lon[i] - lon[p]) * kx * M, (lat[i] - lat[p]) * M);
+      if (d < wd) { wd = d; wn = i; }
+    }
+    if (wn < 0) continue;
+    const walk = wd / WALK_MS;
+    eF.push(wn); eT.push(p); eC.push(T_WAIT[cls] + walk); eL.push(wd);   // board
+    eF.push(p); eT.push(wn); eC.push(60 + walk); eL.push(wd);            // get off
+  }
+  for (const [a, b, cls] of segs) {
+    const d = hav(lat[a], lon[a], lat[b], lon[b]), c = d / T_SPEED[cls];
+    sA.push(a); sB.push(b);
+    eF.push(a); eT.push(b); eC.push(c); eL.push(d);
+    eF.push(b); eT.push(a); eC.push(c); eL.push(d);
+  }
+}
 function snapNode(lat, lon) {
   const k = Math.cos(lat * Math.PI / 180);
   let best = -1, bd = Infinity;
-  for (let i = 0; i < G.n; i++) {
+  for (let i = 0; i < G.roadN; i++) {
     if (!G.inMain[i]) continue;
     const dy = G.lat[i] - lat, dx = (G.lon[i] - lon) * k, d = dx * dx + dy * dy;
     if (d < bd) { bd = d; best = i; }
@@ -848,8 +952,18 @@ async function analyzeLocal(regions) {
   setStatus(`Loading the ${M.name} road map…`, "busy");
   const D = await loadTiles(need, (got, total) =>
     setStatus(`Loading ${need.length} road map tile${need.length > 1 ? "s" : ""} (${(got / 1e6).toFixed(1)} of ${(total / 1e6).toFixed(1)} MB)…`, "busy"));
+  let TT = null;
+  if (mode === "transit") {
+    const tregs = use.filter((r) => r.transit);
+    if (!tregs.length) throw new Error("transit lines aren't in the pre-built map here yet");
+    setStatus("Loading transit lines…", "busy");
+    const tm = await Promise.all(tregs.map((r) => loadManifest(r.transit)));
+    const urls = [];
+    tm.forEach((m, i) => m.tiles.forEach((t) => { if (boxesOverlap(t.bbox, box)) urls.push(tregs[i].base + t.file); }));
+    TT = await Promise.all(urls.map((u) => getJSON(u)));
+  }
   setStatus("Building the street network…", "busy"); await tick();
-  G = buildLocalGraph(D, box, mode);
+  G = buildLocalGraph(D, box, mode, TT);
   if (G.S < 10) throw new Error("no roads in the pre-built map here");
   projectNodes();
   const R = { kind: "roads", mode, tier: `every street (pre-loaded ${M.name} map, updated ${M.built})`, src: [], flood: [], snapWarn: [] };
@@ -889,7 +1003,7 @@ async function analyzeLocal(regions) {
 function chooseMeetingRoads() {
   const R = result, F = R.flood, fair = settings.goal === "fair";
   let best = -1, bMax = Infinity, bSum = Infinity;
-  outer: for (let v = 0; v < G.n; v++) {
+  outer: for (let v = 0; v < G.roadN; v++) {
     let mx = 0, sm = 0;
     for (let i = 0; i < F.length; i++) {
       const d = F[i].dist[v];
@@ -919,11 +1033,14 @@ async function analyze() {
   if (cov && people.every((p) => cov.some((r) => inBox(r.bbox, p.lat, p.lon)))) {
     stopAnim(); clearRoutes(); busy = true; renderList();
     let ok = false;
+    let err = null;
     try { ok = await analyzeLocal(cov); }
-    catch (e) { console.warn("Pre-built map unavailable, using the routing service instead:", e); result = null; G = null; }
+    catch (e) { err = e; console.warn("Pre-built map unavailable, using the routing service instead:", e); result = null; G = null; }
     finally { busy = false; renderList(); }
     if (ok) return;
+    if (settings.mode === "transit") { setStatus(`Transit estimates aren't available here (${err && err.message}). Try Car, Bike or Walk.`, "err"); return; }
   }
+  if (settings.mode === "transit") return setStatus("Transit estimates only work inside the pre-built map areas for now. Try Car, Bike or Walk.", "err");
   return analyzeGrid();
 }
 
@@ -934,6 +1051,7 @@ async function analyzeGrid() {
   let s = 90, w = 180, n = -90, e = -180;
   for (const p of people) { s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lon); e = Math.max(e, p.lon); }
   const spanKm = hav(s, w, n, e) / 1000;
+  if (mode === "bike" && spanKm > 120) return setStatus(`These locations are about ${Math.round(spanKm)} km apart, which is a long ride. Switch to Car for groups this spread out.`, "err");
   if (mode === "walk" && spanKm > 40) return setStatus(`These locations are about ${Math.round(spanKm)} km apart, which is a long walk. Switch to Car for groups this spread out.`, "err");
   if (spanKm > 800) return setStatus(`These locations are about ${Math.round(spanKm)} km apart. Try a group within a few hundred kilometres of each other.`, "err");
   busy = true; renderList();
@@ -1047,7 +1165,8 @@ function renderResults() {
   if (!R || !R.dist) { box.hidden = true; return; }
   const [lat, lon] = R.meetLL;
   const ll = `${lat.toFixed(5)},${lon.toFixed(5)}`;
-  const travel = R.mode === "walk" ? "walking" : "driving";
+  const info = MODE_INFO[R.mode] || MODE_INFO.drive, travel = info.gmaps;
+  const meetAt = meetDate();
   const secs = R.dist.map((d) => d.secs);
   const mx = Math.max(...secs), mn = Math.min(...secs), tot = secs.reduce((a, b) => a + b, 0);
   const name = R.place ? R.place.main : "Finding the place name…";
@@ -1056,8 +1175,10 @@ function renderResults() {
     const cur = people.find((q) => q.id === p.id);
     const nm = cur ? cur.name : p.name;
     const dir = `https://www.google.com/maps/dir/?api=1&origin=${p.lat.toFixed(5)},${p.lon.toFixed(5)}&destination=${ll}&travelmode=${travel}`;
+    const leave = new Date(meetAt.getTime() - Math.ceil(R.dist[i].secs / 60) * 60000);
     return `<tr class="${secs[i] === mx ? "longest" : ""}"><td><span class="dot" style="--c:${p.color}"></span>${escapeHtml(nm)}</td>
-      <td class="num">${fmtMin(R.dist[i].secs)}</td><td class="num">${fmtKm(R.dist[i].meters)}</td>
+      <td class="num"><span class="leave">Leave ${fmtClock(leave, meetAt)}</span></td>
+      <td class="num">${fmtMin(R.dist[i].secs)}<small>${fmtKm(R.dist[i].meters)}</small></td>
       <td class="num"><a href="${dir}" target="_blank" rel="noopener">Route</a></td></tr>`;
   }).join("");
   box.innerHTML = `
@@ -1073,7 +1194,7 @@ function renderResults() {
     </div>
     <table><tbody>${rows}</tbody></table>
     <p class="note">${R.goal === "fair" ? `Longest trip ${fmtMin(mx)}. Gap between the longest and shortest trip: ${fmtMin(mx - mn)}.` : `Total travel for everyone: ${fmtMin(tot)}. Longest single trip: ${fmtMin(mx)}.`}
-    Times are estimates for ${travel} along ${escapeHtml(R.tier)}, without live traffic.${R.snapWarn.length ? " " + escapeHtml(R.snapWarn.join("; ")) + "." : ""}</p>`;
+    Everyone arrives at ${fmtClock(meetAt)}. Times are estimates for ${info.label} along ${escapeHtml(R.tier)}${R.mode === "drive" ? ", without live traffic" : ""}.${R.mode === "transit" ? " Transit uses subway, LRT, streetcar and rail lines with average waits; buses and timetables aren't included yet." : ""}${R.snapWarn.length ? " " + escapeHtml(R.snapWarn.join("; ")) + "." : ""}</p>`;
   box.hidden = false;
   $("copy").addEventListener("click", async (e) => {
     try { await navigator.clipboard.writeText(ll); e.target.textContent = "Copied"; }
@@ -1378,7 +1499,7 @@ async function loadNearby(R) {
   $("nearby").hidden = false;
   $("nb-filters").textContent = ""; $("nb-list").textContent = ""; $("nb-hint").textContent = "";
   $("nb-status").innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-2px;margin-right:8px"></span>Looking for places near the meeting spot…';
-  const radii = R.mode === "walk" ? [700, 1500] : [1200, 3000];
+  const radii = R.mode === "drive" ? [1200, 3000] : R.mode === "bike" ? [1000, 2500] : [700, 1500];
   let els = [], used = radii[0];
   try {
     const pre = await preloadedPlaces(lat, lon, radii[radii.length - 1]);
@@ -1421,6 +1542,7 @@ async function loadNearby(R) {
   if (!CATS.some((c) => c.id === nbFilter)) nbFilter = "all";
   renderNearby();
 }
+$("nb-open").addEventListener("change", () => renderNearby());
 function renderNearby() {
   if (!nearby) return;
   const { list } = nearby;
@@ -1458,8 +1580,14 @@ function renderNearby() {
   }
   sub.hidden = !sub.childElementCount;
   $("nb-hint").textContent = nbFilter === "free" ? FREE_HINT : "";
-  const shown = base.filter((p) => subMatch(p, nbSub)).slice(0, 40);
-  $("nb-status").textContent = shown.length ? "" : (nbFilter === "free" ? "No free public spaces found close by. Try a different filter." : "Nothing found close to the meeting spot.");
+  const at = meetDate(), onlyOpen = $("nb-open").checked;
+  const matched = base.filter((p) => subMatch(p, nbSub));
+  const shown = (onlyOpen ? matched.filter((p) => openAt(p.tags.opening_hours, at) === true) : matched).slice(0, 40);
+  const unknown = matched.filter((p) => openAt(p.tags.opening_hours, at) === null).length;
+  $("nb-status").textContent = shown.length
+    ? (onlyOpen && unknown ? `${unknown} place${unknown > 1 ? "s" : ""} without listed hours ${unknown > 1 ? "are" : "is"} hidden.` : "")
+    : onlyOpen ? `Nothing here is listed as open at ${fmtClock(at)}.${unknown ? ` ${unknown} place${unknown > 1 ? "s have" : " has"} no listed hours.` : ""}`
+    : (nbFilter === "free" ? "No free public spaces found close by. Try a different filter." : "Nothing found close to the meeting spot.");
   const ul = $("nb-list"); ul.textContent = "";
   poiLayer.clearLayers();
   for (const p of shown) {
@@ -1467,7 +1595,9 @@ function renderNearby() {
       .bindTooltip(escapeHtml(p.name), { direction: "top", offset: [0, -6] }).addTo(poiLayer);
     const li = document.createElement("li");
     li.className = "poi"; li.tabIndex = 0; li.style.setProperty("--k", p.color);
-    const hours = p.tags.opening_hours ? `<small>${escapeHtml(p.tags.opening_hours.slice(0, 60))}</small>` : "";
+    const st = openAt(p.tags.opening_hours, at);
+    const stTxt = st === true ? `<span class="st-open">Open at ${fmtClock(at)}</span>` : st === false ? `<span class="st-closed">Closed at ${fmtClock(at)}</span>` : "";
+    const hours = p.tags.opening_hours ? `<small>${stTxt}${stTxt ? " · " : ""}${escapeHtml(p.tags.opening_hours.slice(0, 60))}</small>` : "";
     const gq = encodeURIComponent(`${p.name} ${p.lat.toFixed(5)},${p.lon.toFixed(5)}`);
     li.innerHTML = `<span class="k"></span>
       <div class="nm"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(poiKind(p.tags))}${p.free ? ' · <span class="free-tag">Free</span>' : ""}</small>${hours}</div>
@@ -1484,13 +1614,150 @@ $("go").addEventListener("click", analyze);
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
+/* ---------------- meeting time ---------------- */
+function pad2(n) { return String(n).padStart(2, "0"); }
+function toLocalInput(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function nextHalfHour() { const d = new Date(Date.now() + 15 * 60000); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 30 : 60); return d; }
+function meetDate() {
+  const d = settings.when ? new Date(settings.when) : null;
+  return d && !isNaN(d) ? d : nextHalfHour();
+}
+function fmtClock(d, ref) {
+  const t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const base = ref || new Date();
+  if (d.toDateString() === base.toDateString()) return t;
+  return d.toLocaleDateString([], { weekday: "short" }) + " " + t;
+}
+function syncWhen() {
+  $("when").value = toLocalInput(meetDate());
+  $("nb-open-label").textContent = `Open at ${fmtClock(meetDate())}`;
+}
+$("when").addEventListener("change", () => {
+  settings.when = $("when").value; save(); syncWhen();
+  if (result && result.dist) renderResults();
+  renderNearby();
+});
+$("when-now").addEventListener("click", () => { settings.when = toLocalInput(new Date()); save(); syncWhen(); if (result && result.dist) renderResults(); renderNearby(); });
+
+/* ---------------- opening hours ---------------- */
+// Understands the common OpenStreetMap formats ("Mo-Fr 08:00-17:00; Sa 10:00-14:00", "24/7",
+// overnight ranges, "off"). Returns true/false, or null when the hours are missing or too unusual.
+const OH_DAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+function ohDays(spec) {
+  const out = new Set();
+  for (const part of spec.split(",")) {
+    const p = part.trim();
+    if (!p || p === "PH" || p === "SH") continue;
+    const m = p.match(/^(Mo|Tu|We|Th|Fr|Sa|Su)(?:\[[^\]]*\])?(?:-(Mo|Tu|We|Th|Fr|Sa|Su))?$/);
+    if (!m) return null;
+    const a = OH_DAYS.indexOf(m[1]), b = m[2] ? OH_DAYS.indexOf(m[2]) : a;
+    for (let i = a; ; i = (i + 1) % 7) { out.add(i); if (i === b) break; }
+  }
+  return out;
+}
+function ohTimes(spec) {
+  const out = [];
+  for (const part of spec.split(",")) {
+    const m = part.trim().match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\+?$/) || part.trim().match(/^(\d{1,2}):(\d{2})\+$/);
+    if (!m) return null;
+    const a = +m[1] * 60 + +m[2];
+    let b = m[3] != null ? +m[3] * 60 + +m[4] : 24 * 60;
+    if (b <= a) b += 24 * 60; // runs past midnight
+    out.push([a, b]);
+  }
+  return out;
+}
+function parseOH(oh) {
+  const week = Array.from({ length: 7 }, () => null); // null = no rule yet
+  const rules = oh.replace(/\|\|/g, ";").split(";").flatMap((r) => r.split(/,\s*(?=(?:Mo|Tu|We|Th|Fr|Sa|Su|PH)\b)/));
+  let any = false;
+  for (let r of rules) {
+    r = r.trim();
+    if (!r) continue;
+    if (/^PH\b/.test(r)) continue;
+    if (/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|week|sunrise|sunset|dawn|dusk)\b/.test(r)) return null;
+    const m = r.match(/^((?:(?:Mo|Tu|We|Th|Fr|Sa|Su|PH|SH)(?:\[[^\]]*\])?(?:-(?:Mo|Tu|We|Th|Fr|Sa|Su))?\s*,?\s*)+)\s*(.*)$/);
+    let days, rest;
+    if (m) { days = ohDays(m[1].replace(/\s+/g, "")); rest = m[2].trim(); } else { days = new Set([0, 1, 2, 3, 4, 5, 6]); rest = r; }
+    if (!days) return null;
+    rest = rest.replace(/"[^"]*"/g, "").trim();
+    let ranges;
+    if (/^(off|closed)$/i.test(rest)) ranges = [];
+    else if (rest === "" || /^open$/i.test(rest) || rest === "24/7" || rest === "00:00-24:00") ranges = [[0, 1440]];
+    else ranges = ohTimes(rest);
+    if (!ranges) return null;
+    for (const d of days) week[d] = ranges;
+    any = true;
+  }
+  return any ? week.map((x) => x || []) : null;
+}
+function openAt(oh, date) {
+  if (!oh) return null;
+  const t = oh.trim();
+  if (t === "24/7") return true;
+  const week = parseOH(t);
+  if (!week) return null;
+  const dow = (date.getDay() + 6) % 7, min = date.getHours() * 60 + date.getMinutes();
+  if (week[dow].some(([a, b]) => min >= a && min < b)) return true;
+  const prev = week[(dow + 6) % 7];
+  return prev.some(([, b]) => b > 1440 && min + 1440 < b);
+}
+
+/* ---------------- invite friends (share link) ---------------- */
+function b64urlEncode(str) { return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function b64urlDecode(str) { return decodeURIComponent(escape(atob(str.replace(/-/g, "+").replace(/_/g, "/")))); }
+function groupLink() {
+  const data = { v: 1, p: people.map((p) => [p.name, +p.lat.toFixed(4), +p.lon.toFixed(4), p.label]), m: settings.mode, g: settings.goal, t: settings.when || toLocalInput(meetDate()) };
+  return location.origin + location.pathname + "#g=" + b64urlEncode(JSON.stringify(data));
+}
+let toastTimer = 0;
+function toast(msg) {
+  let el = document.querySelector(".toast");
+  if (!el) { el = document.createElement("div"); el.className = "toast"; el.setAttribute("role", "status"); document.body.appendChild(el); }
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
+}
+$("invite").addEventListener("click", async () => {
+  const url = groupLink();
+  const text = people.length
+    ? `Where should we meet? Open this, add where you're coming from, then send the link back to the group.`
+    : `Help pick where we meet: add where you're coming from.`;
+  if (navigator.share) {
+    try { await navigator.share({ title: "Meet in the Middle", text, url }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(url); toast("Link copied. Paste it in your group chat."); }
+  catch (e) { prompt("Copy this link:", url); }
+});
+function loadFromHash() {
+  const m = location.hash.match(/^#g=([A-Za-z0-9_-]+)/);
+  if (!m) return false;
+  try {
+    const d = JSON.parse(b64urlDecode(m[1]));
+    if (!d || !Array.isArray(d.p)) return false;
+    people = d.p.slice(0, MAX_PEOPLE).map(([name, lat, lon, label], i) => ({ id: uid++, name: String(name || `Person ${i + 1}`).slice(0, 40), lat: +lat, lon: +lon, label: String(label || "Shared location").slice(0, 80), color: COLORS[i % COLORS.length] }))
+      .filter((p) => isFinite(p.lat) && isFinite(p.lon));
+    if (MODE_INFO[d.m]) settings.mode = d.m;
+    if (d.g === "fair" || d.g === "total") settings.goal = d.g;
+    if (typeof d.t === "string") settings.when = d.t;
+    isExample = false;
+    history.replaceState(null, "", location.pathname + location.search);
+    const j = $("join");
+    j.textContent = people.length >= MAX_PEOPLE
+      ? `You opened a shared group of ${people.length}. Tap “Find the meeting spot” to see where to meet.`
+      : `You joined a group of ${people.length}. Add yourself with “Use my location” or search your address, then tap “Invite friends” to send the updated link back.`;
+    j.hidden = false;
+    return true;
+  } catch (e) { console.warn("Couldn't read the shared link", e); return false; }
+}
+
 /* ---------------- boot ---------------- */
-if (!load() || !people.length) {
+const fromLink = (load(), loadFromHash());
+if (!fromLink && !people.length) {
   people = EXAMPLE.map((p, i) => ({ ...p, id: uid++, color: COLORS[i] }));
   isExample = true;
 }
 flood.addTo(map);
-bindSeg("mode", "mode"); bindSeg("goal", "goal"); goalHint();
+bindSeg("mode", "mode"); bindSeg("goal", "goal"); goalHint(); modeHint(); syncWhen();
 refresh();
 fitToPeople();
 </script>
