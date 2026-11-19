@@ -89,6 +89,12 @@ jobs:
               sleep 15
             done
           done
+          # The mirror briefly removes files while refreshing them; wait and retry the main path
+          for wait in 180 300; do
+            [ "$ok" = 1 ] && break
+            echo "Waiting ${wait}s for the mirror, then retrying"; sleep "$wait"
+            curl -fL --connect-timeout 30 --max-time 3600 -o region.osm.pbf "https://download.openstreetmap.fr/extracts/$P-latest.osm.pbf" && ok=1
+          done
           if [ "$ok" != 1 ]; then
             # Show what the mirror actually has, to help fix the path
             parent="$(dirname "$U")"
@@ -155,8 +161,19 @@ jobs:
           pattern: region-*
           path: artifacts
 
+      - name: Get the current index from R2 (to keep regions that failed this run)
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          [ -n "$R2_ACCOUNT_ID" ] && [ -n "$AWS_ACCESS_KEY_ID" ] || exit 0
+          aws s3 cp "s3://$R2_BUCKET/index.json" prev-index.json --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" || true
+
       - name: Make index.json
-        run: python3 tools/make_index.py artifacts upload
+        run: python3 tools/make_index.py artifacts upload prev-index.json
 
       - name: Upload to Cloudflare R2
         env:
