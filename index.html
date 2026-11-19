@@ -601,31 +601,57 @@ function planQuery(mode) {
     else if (D <= 32) { classes = "trunk|primary|secondary|tertiary|unclassified|residential|living_street|pedestrian"; tier = "streets only (footpaths skipped to keep the download small)"; }
     else return { error: `These locations span about ${Math.round(spanKm)} km, which is a long walk. Switch to Car for groups this spread out.` };
   }
-  const q = `[out:json][timeout:120][maxsize:1073741824];way["highway"~"^(${classes})$"](${bbox.map((v) => v.toFixed(5)).join(",")});out body geom qt;`;
-  return { q, bbox, tier, spanKm };
+  const g = Math.min(5, Math.max(1, Math.ceil(D / (classes.includes("residential") ? 7 : 25))));
+  const tiles = [];
+  const dLat = (bbox[2] - bbox[0]) / g, dLon = (bbox[3] - bbox[1]) / g;
+  for (let r = 0; r < g; r++) for (let c = 0; c < g; c++) {
+    const tb = [bbox[0] + r * dLat, bbox[1] + c * dLon, bbox[0] + (r + 1) * dLat, bbox[1] + (c + 1) * dLon];
+    tiles.push(`[out:json][timeout:60];way["highway"~"^(${classes})$"](${tb.map((v) => v.toFixed(5)).join(",")});out body geom qt;`);
+  }
+  return { tiles, bbox, tier, spanKm };
 }
 
-let TIMEOUT_MS = 70000;
+let TIMEOUT_MS = 60000;
 async function fetchWithTimeout(url, opts, ms) {
   const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
   try { return await fetch(url, { ...opts, signal: ac.signal }); }
   catch (e) { throw new Error(e.name === "AbortError" ? "the server took too long" : e.message); }
   finally { clearTimeout(t); }
 }
-async function fetchRoads(q, onStage) {
+async function fetchTile(q, k) {
   let lastErr;
-  for (const [i, url] of OVERPASS.entries()) {
+  for (let attempt = 0; attempt < OVERPASS.length + 1; attempt++) {
+    const url = OVERPASS[(k + attempt) % OVERPASS.length];
     try {
-      onStage(i ? `First map server was slow. Trying backup server ${i}…` : `Downloading the road network from OpenStreetMap… (large areas can take up to a minute)`);
+      if (attempt >= OVERPASS.length) await new Promise((r) => setTimeout(r, 4000));
       const r = await fetchWithTimeout(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } }, TIMEOUT_MS);
       if (!r.ok) throw new Error(`server said ${r.status}`);
       const j = await r.json();
-      if (j.remark && /error|timed out|out of memory/i.test(j.remark)) throw new Error(j.remark);
-      if (!j.elements || !j.elements.length) throw new Error("no roads found in this area");
-      return j.elements;
+      if (j.remark && /error|timed out|out of memory/i.test(j.remark)) throw new Error("server ran out of time");
+      return j.elements || [];
     } catch (e) { lastErr = e; }
   }
-  throw new Error(`Couldn't download road data (${lastErr && lastErr.message}). The free map servers may be busy; wait a minute and try again.`);
+  throw lastErr;
+}
+async function fetchRoads(tiles, onStage) {
+  const byId = new Map();
+  let done = 0, next = 0, failed = null;
+  const total = tiles.length;
+  onStage(total > 1 ? `Downloading the road network (0 of ${total} areas)…` : "Downloading the road network from OpenStreetMap…");
+  const worker = async () => {
+    while (next < total && !failed) {
+      const k = next++;
+      try {
+        for (const w of await fetchTile(tiles[k], k)) byId.set(w.id, w);
+        done++;
+        if (total > 1) onStage(`Downloading the road network (${done} of ${total} areas)…`);
+      } catch (e) { failed = e; }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()].slice(0, Math.min(3, total)));
+  if (failed) throw new Error(`Couldn't download road data (${failed.message}). The free map servers may be busy; wait a minute and try again.`);
+  if (!byId.size) throw new Error("No roads found in this area.");
+  return [...byId.values()];
 }
 
 function onewayDir(t) {
@@ -763,7 +789,7 @@ async function analyze() {
   if (plan.error) return setStatus(plan.error, "err");
   busy = true; renderList();
   try {
-    const ways = await fetchRoads(plan.q, (m) => setStatus(m, "busy"));
+    const ways = await fetchRoads(plan.tiles, (m) => setStatus(m, "busy"));
     setStatus(`Building a network from ${ways.length.toLocaleString()} roads…`, "busy"); await tick();
     G = buildGraph(ways, settings.mode);
     projectNodes();
