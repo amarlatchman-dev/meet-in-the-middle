@@ -319,9 +319,9 @@ function initial(name) { return (name.trim()[0] || "?").toUpperCase(); }
 
 /* ---------------- map ---------------- */
 const map = L.map("map", { zoomControl: true, preferCanvas: false, worldCopyJump: true }).setView([43.71, -79.42], 11);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
-  subdomains: "abcd", maxZoom: 19, opacity: 0.55,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom: 19, maxNativeZoom: 16, opacity: 0.8,
+  attribution: 'Basemap &copy; Esri | Roads &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(map);
 map.createPane("flood").style.zIndex = 380;
 map.createPane("routes").style.zIndex = 420;
@@ -605,12 +605,19 @@ function planQuery(mode) {
   return { q, bbox, tier, spanKm };
 }
 
+let TIMEOUT_MS = 70000;
+async function fetchWithTimeout(url, opts, ms) {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ac.signal }); }
+  catch (e) { throw new Error(e.name === "AbortError" ? "the server took too long" : e.message); }
+  finally { clearTimeout(t); }
+}
 async function fetchRoads(q, onStage) {
   let lastErr;
-  for (const url of OVERPASS) {
+  for (const [i, url] of OVERPASS.entries()) {
     try {
-      onStage(`Downloading the road network from OpenStreetMap…`);
-      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      onStage(i ? `First map server was slow. Trying backup server ${i}…` : `Downloading the road network from OpenStreetMap… (large areas can take up to a minute)`);
+      const r = await fetchWithTimeout(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } }, TIMEOUT_MS);
       if (!r.ok) throw new Error(`server said ${r.status}`);
       const j = await r.json();
       if (j.remark && /error|timed out|out of memory/i.test(j.remark)) throw new Error(j.remark);
@@ -1126,7 +1133,7 @@ async function fetchOverpass(q) {
   let last;
   for (const url of OVERPASS) {
     try {
-      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      const r = await fetchWithTimeout(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } }, TIMEOUT_MS);
       if (!r.ok) throw new Error(`server said ${r.status}`);
       const j = await r.json();
       if (j.remark && /error|timed out/i.test(j.remark)) throw new Error(j.remark);
