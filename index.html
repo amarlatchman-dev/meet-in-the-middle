@@ -1320,6 +1320,25 @@ function poiKind(t) {
 }
 function clearNearby() { nearby = null; poiLayer.clearLayers(); $("nearby").hidden = true; }
 
+// Places pre-built by tools/build_pois.py (data/pois/). Returns null when not covered.
+let poiManifestP = null;
+const poiTileCache = {};
+async function preloadedPlaces(lat, lon, radius) {
+  if (!poiManifestP) poiManifestP = fetch("data/pois/manifest.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const M = await poiManifestP;
+  if (!M || !inBox(M.bbox, lat, lon)) return null;
+  const dLat = radius / 111000, dLon = radius / (111000 * Math.cos(lat * Math.PI / 180));
+  const box = [lat - dLat, lon - dLon, lat + dLat, lon + dLon];
+  const need = M.tiles.filter((t) => boxesOverlap(t.bbox, box));
+  try {
+    const lists = await Promise.all(need.map((t) => {
+      if (!poiTileCache[t.file]) poiTileCache[t.file] = fetch("data/" + t.file).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .catch((e) => { delete poiTileCache[t.file]; throw e; });
+      return poiTileCache[t.file];
+    }));
+    return lists.flat().map(([la, lo, name, tags]) => ({ lat: la, lon: lo, tags: { ...tags, name } }));
+  } catch (e) { return null; }
+}
 async function loadNearby(R) {
   clearNearby();
   const [lat, lon] = R.meetLL;
@@ -1329,11 +1348,21 @@ async function loadNearby(R) {
   const radii = R.mode === "walk" ? [700, 1500] : [1200, 3000];
   let els = [], used = radii[0];
   try {
-    for (const r of radii) {
-      used = r;
-      els = await fetchOverpass(nearbyQuery(lat, lon, r));
-      if (result !== R) return;
-      if (els.length >= 12) break;
+    const pre = await preloadedPlaces(lat, lon, radii[radii.length - 1]);
+    if (result !== R) return;
+    if (pre) {
+      for (const r of radii) {
+        used = r;
+        els = pre.filter((p) => hav(lat, lon, p.lat, p.lon) <= r);
+        if (els.length >= 12) break;
+      }
+    } else {
+      for (const r of radii) {
+        used = r;
+        els = await fetchOverpass(nearbyQuery(lat, lon, r));
+        if (result !== R) return;
+        if (els.length >= 12) break;
+      }
     }
   } catch (e) {
     if (result !== R) return;

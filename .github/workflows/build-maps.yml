@@ -54,6 +54,13 @@ jobs:
             # bbox order for osmium is W,S,E,N
             osmium tags-filter ontario.osm.pbf w/highway -o roads-all.osm.pbf
             osmium extract -b -83.2,41.6,-74.3,45.7 roads-all.osm.pbf -o roads.osm.pbf
+            osmium tags-filter ontario.osm.pbf \
+              nwr/amenity=restaurant,fast_food,food_court,cafe,ice_cream,bar,pub,biergarten,cinema,theatre,arts_centre,library,marketplace,community_centre \
+              nwr/shop=bakery,pastry,confectionery,chocolate,mall,department_store \
+              nwr/leisure=park,garden,nature_reserve,dog_park,common,bowling_alley,escape_game,amusement_arcade,miniature_golf,trampoline_park,sports_centre,ice_rink,water_park,climbing \
+              nwr/tourism=museum,gallery,zoo,aquarium,theme_park,attraction,viewpoint \
+              -o pois-all.osm.pbf
+            osmium extract -b -83.2,41.6,-74.3,45.7 pois-all.osm.pbf -o pois.osm.pbf
           else
             echo "No extract server reachable; falling back to Overpass tiles"
             python tools/fetch_overpass.py tiles --bbox 41.6,-83.2,45.7,-74.3 --step 0.25
@@ -66,6 +73,10 @@ jobs:
         run: |
           rm -rf data/tiles data/manifest.json
           python tools/build_region.py roads.osm.pbf data --bbox 41.6,-83.2,45.7,-74.3 --step 0.5 --name "Southern Ontario"
+          if [ -f pois.osm.pbf ]; then
+            rm -rf data/pois
+            python tools/build_pois.py pois.osm.pbf data --bbox 41.6,-83.2,45.7,-74.3 --step 0.5
+          fi
           du -sh data; ls data/tiles | wc -l
 
       - name: Commit the map file
@@ -74,5 +85,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A data
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
-          git commit -m "Update Southern Ontario road map from OpenStreetMap"
+          git commit -m "Update Southern Ontario roads and places from OpenStreetMap"
           git push
