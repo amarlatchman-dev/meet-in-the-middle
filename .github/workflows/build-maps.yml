@@ -38,18 +38,24 @@ jobs:
 
       - name: Download road data
         run: |
-          # Primary: Geofabrik's Ontario extract. Retry, since it can be briefly unreachable.
+          # Try the Ontario extract from Geofabrik, then the OpenStreetMap France mirror.
           ok=0
-          for i in 1 2 3 4 5; do
-            if curl -fL --connect-timeout 30 -o ontario.osm.pbf https://download.geofabrik.de/north-america/canada/ontario-latest.osm.pbf; then ok=1; break; fi
-            echo "Geofabrik attempt $i failed; waiting"; sleep $((i * 30))
+          for url in \
+            https://download.geofabrik.de/north-america/canada/ontario-latest.osm.pbf \
+            https://download.openstreetmap.fr/extracts/north-america/canada/ontario-latest.osm.pbf \
+            https://download.openstreetmap.fr/extracts/north-america/canada/ontario.osm.pbf; do
+            for i in 1 2 3; do
+              echo "Trying $url (attempt $i)"
+              if curl -fL --connect-timeout 30 --max-time 3600 -o ontario.osm.pbf "$url"; then ok=1; break 2; fi
+              sleep $((i * 20))
+            done
           done
           if [ "$ok" = 1 ]; then
             # bbox order for osmium is W,S,E,N
             osmium tags-filter ontario.osm.pbf w/highway -o roads-all.osm.pbf
             osmium extract -b -83.2,41.6,-74.3,45.7 roads-all.osm.pbf -o roads.osm.pbf
           else
-            echo "Geofabrik unreachable; falling back to Overpass tiles"
+            echo "No extract server reachable; falling back to Overpass tiles"
             python tools/fetch_overpass.py tiles --bbox 41.6,-83.2,45.7,-74.3 --step 0.25
             for f in tiles/*.osm; do osmium sort "$f" -o "${f%.osm}.pbf"; done
             osmium merge tiles/*.pbf -o roads.osm.pbf
