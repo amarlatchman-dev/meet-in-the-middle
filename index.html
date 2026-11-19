@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meet in the Middle</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: full-height split. Control panel on the left, glowing road map on the right; stacks map-over-panel on phones. */
+:root {
+  --ink: #05080b;        /* map + page ground */
+  --panel: #0c1217;      /* control panel */
+  --raise: #151e25;      /* inputs, rows */
+  --line: #22303a;       /* hairlines */
+  --text: #e6eef2;
+  --muted: #8a9ba6;
+  --accent: #ffd34d;     /* primary action: lamplight gold */
+  --danger: #ff6b7d;
+  --road: #1d3b2f;       /* unexplored road glow */
+  --f-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--ink); color: var(--text); font: 14px/1.45 var(--f-body); }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#app { display: grid; grid-template-columns: 360px 1fr; height: 100%; }
+#panel {
+  background: var(--panel); border-right: 1px solid var(--line);
+  overflow-y: auto; display: flex; flex-direction: column; gap: 18px;
+  padding: 20px 18px 28px;
+}
+#mapwrap { position: relative; min-width: 0; }
+#map { position: absolute; inset: 0; background: var(--ink); }
+
+h1 { font: 700 26px/1.05 var(--f-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h1 span { color: var(--accent); }
+.lede { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.label { font: 600 11px/1 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* Search */
+.search { position: relative; }
+.search input {
+  width: 100%; background: var(--raise); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 12px 11px 36px; outline: none;
+}
+.search input:focus { border-color: #3b4f5c; }
+.search svg { position: absolute; left: 12px; top: 13px; width: 15px; height: 15px; stroke: var(--muted); fill: none; stroke-width: 2; }
+#suggest {
+  position: absolute; z-index: 1000; top: calc(100% + 4px); left: 0; right: 0; margin: 0; padding: 4px;
+  list-style: none; background: var(--raise); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.5); max-height: 280px; overflow-y: auto;
+}
+#suggest button { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 7px; padding: 8px 10px; }
+#suggest button:hover, #suggest button.active { background: #1e2a33; }
+#suggest b { display: block; font-weight: 600; }
+#suggest small { color: var(--muted); }
+#suggest .msg { padding: 8px 10px; color: var(--muted); }
+.add-tools { display: flex; gap: 8px; margin-top: 8px; }
+.ghost {
+  background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+  color: var(--muted); font-size: 12.5px;
+}
+.ghost:hover { color: var(--text); border-color: #3b4f5c; }
+.ghost[aria-pressed="true"] { color: var(--ink); background: var(--accent); border-color: var(--accent); }
+
+/* People */
+#people { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.person {
+  display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px;
+  background: var(--raise); border-radius: 10px; padding: 8px 8px 8px 10px;
+}
+.avatar {
+  width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 12px var(--f-display); color: var(--ink); background: var(--c);
+  box-shadow: 0 0 10px var(--c);
+}
+.person .who { min-width: 0; }
+.person input {
+  width: 100%; background: none; border: 0; padding: 0; font-weight: 600; outline: none;
+  border-bottom: 1px dashed transparent;
+}
+.person input:focus { border-bottom-color: var(--muted); }
+.person .where { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.person .x { background: none; border: 0; color: var(--muted); width: 28px; height: 28px; border-radius: 6px; font-size: 18px; line-height: 1; }
+.person .x:hover { color: var(--danger); background: #1e2a33; }
+.empty { color: var(--muted); font-size: 13px; padding: 10px; border: 1px dashed var(--line); border-radius: 10px; }
+.example-chip { font-size: 12px; color: var(--muted); }
+.example-chip button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: 12px; }
+
+/* Options */
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--raise); border-radius: 10px; padding: 3px; margin-top: 8px; }
+.seg button { background: none; border: 0; border-radius: 8px; padding: 7px 6px; color: var(--muted); font-size: 13px; }
+.seg button[aria-pressed="true"] { background: #24323c; color: var(--text); font-weight: 600; }
+.hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+
+#go {
+  width: 100%; border: 0; border-radius: 12px; padding: 13px; background: var(--accent); color: #1a1400;
+  font: 700 15px var(--f-display); letter-spacing: 0.01em;
+}
+#go:disabled { opacity: .4; cursor: not-allowed; }
+#status { font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+#status.err { color: var(--danger); }
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Results */
+#results { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.meet-name { font: 700 22px/1.1 var(--f-display); margin: 4px 0 2px; text-wrap: balance; }
+.meet-sub { color: var(--muted); font-size: 12.5px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions a, .actions button {
+  font-size: 12.5px; text-decoration: none; color: var(--text); background: var(--raise);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+}
+.actions a:hover, .actions button:hover { border-color: #3b4f5c; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+td { padding: 7px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+td.num { text-align: right; font-family: var(--f-mono); font-size: 12.5px; white-space: nowrap; }
+td .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 6px var(--c); margin-right: 8px; }
+td a { color: var(--muted); font-size: 12px; }
+tr.longest td.num:first-of-type { color: var(--accent); }
+.note { font-size: 12px; color: var(--muted); }
+
+/* Map HUD */
+#hud {
+  position: absolute; z-index: 500; top: 14px; left: 0; right: 0; text-align: center; pointer-events: none;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#hud .h { font: 700 clamp(20px, 3.2vw, 34px)/1.1 var(--f-display); color: var(--hc, var(--accent)); text-shadow: 0 2px 14px rgba(0,0,0,.9); }
+#hud .h .n { font-family: var(--f-mono); color: var(--text); font-size: .62em; font-weight: 700; margin-left: .35em; }
+#hud .h .n small { color: var(--muted); font-size: .8em; font-weight: 500; }
+#hud .s { margin-top: 4px; font: 600 14px var(--f-body); color: var(--text); text-shadow: 0 1px 8px #000; }
+#replay {
+  position: absolute; z-index: 500; right: max(14px, env(safe-area-inset-right, 0px)); bottom: 28px;
+  background: rgba(12,18,23,.88); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-size: 13px;
+}
+#replay:hover { border-color: var(--accent); }
+
+/* Leaflet theming */
+.leaflet-container { background: var(--ink); font-family: var(--f-body); }
+.leaflet-control-attribution { background: rgba(5,8,11,.75) !important; color: var(--muted) !important; }
+.leaflet-control-attribution a { color: #a9bac4 !important; }
+.leaflet-bar a { background: var(--panel) !important; color: var(--text) !important; border-color: var(--line) !important; }
+.leaflet-tooltip.tag {
+  background: rgba(5,8,11,.85); color: var(--c); border: 1px solid var(--c); border-radius: 4px;
+  font: 700 11px var(--f-body); padding: 2px 6px; box-shadow: 0 0 8px rgba(0,0,0,.6);
+}
+.leaflet-tooltip.tag::before { display: none; }
+.pin-avatar {
+  width: 30px; height: 30px; border-radius: 50%; background: rgba(5,8,11,.9); border: 2.5px solid var(--c);
+  display: grid; place-items: center; font: 700 12px var(--f-display); color: var(--c);
+  box-shadow: 0 0 12px var(--c), inset 0 0 8px var(--c);
+}
+.meet-pin { width: 38px; height: 38px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #fff; display: grid; place-items: center; box-shadow: 0 0 22px rgba(255,255,255,.8); }
+.meet-pin span { transform: rotate(45deg); font-size: 16px; color: var(--ink); font-weight: 700; }
+.leaflet-tooltip.meet-tag { background: #fff; color: var(--ink); border: 0; font: 700 12px var(--f-body); padding: 3px 8px; border-radius: 4px; }
+.leaflet-tooltip.meet-tag::before { display: none; }
+.route-glow { filter: blur(3px); }
+.flood-canvas { pointer-events: none; }
+.picking #map, .picking .leaflet-container { cursor: crosshair !important; }
+
+@media (max-width: 760px) {
+  #app { grid-template-columns: 1fr; grid-template-rows: 58vh auto; height: auto; min-height: 100%; }
+  #mapwrap { order: -1; height: 58vh; }
+  #panel {
+    border-right: 0; border-top: 1px solid var(--line); overflow: visible;
+    padding-block: 18px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  #hud .s { font-size: 12.5px; }
+}
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.5s; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <header>
+      <h1>Meet in the <span>Middle</span></h1>
+      <p class="lede">Add up to 10 starting points. Each one floods outward along the real streets, and the meeting spot is where the floods meet.</p>
+    </header>
+
+    <section>
+      <div class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Search an address or place" autocomplete="off" aria-label="Search an address or place">
+        <ul id="suggest" hidden></ul>
+      </div>
+      <div class="add-tools">
+        <button class="ghost" id="pick" aria-pressed="false">Drop a pin on the map</button>
+      </div>
+    </section>
+
+    <section>
+      <div class="row">
+        <span class="label">People</span>
+        <span class="label" id="count">0 / 10</span>
+      </div>
+      <ul id="people"></ul>
+      <div class="example-chip" id="example" hidden>Example group in Toronto. Adding someone replaces it, or <button id="clear">clear it now</button>.</div>
+    </section>
+
+    <section>
+      <span class="label">Travel by</span>
+      <div class="seg" id="mode">
+        <button data-v="drive" aria-pressed="true">Car</button>
+        <button data-v="walk" aria-pressed="false">Walking</button>
+      </div>
+      <div style="height:12px"></div>
+      <span class="label">Pick the spot that</span>
+      <div class="seg" id="goal">
+        <button data-v="fair" aria-pressed="true">Is fairest</button>
+        <button data-v="total" aria-pressed="false">Saves most travel</button>
+      </div>
+      <p class="hint" id="goal-hint"></p>
+    </section>
+
+    <button id="go">Find the meeting spot</button>
+    <div id="status" hidden></div>
+    <section id="results" hidden></section>
+  </aside>
+
+  <main id="mapwrap">
+    <div id="map"></div>
+    <div id="hud"><div class="h" id="hud-h"></div><div class="s" id="hud-s"></div></div>
+    <button id="replay" hidden>Replay</button>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+"use strict";
+/* ---------------- constants ---------------- */
+const MAX_PEOPLE = 10;
+const COLORS = ["#ffcf3f", "#9a86ff", "#ff5c84", "#55b8ff", "#4fe3a8", "#ff8c3a", "#d06bff", "#39e1e1", "#ff6fd2", "#b8f24a"];
+const OVERPASS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+];
+const WALK_MS = 4.8 / 3.6;
+const EXAMPLE = [
+  { name: "Priya", label: "York University", lat: 43.7735, lon: -79.5019 },
+  { name: "Noah", label: "Don Mills", lat: 43.7347, lon: -79.3443 },
+  { name: "Ava", label: "Rosedale", lat: 43.6790, lon: -79.3800 },
+  { name: "Ryan", label: "High Park", lat: 43.6465, lon: -79.4637 },
+];
+
+/* ---------------- state ---------------- */
+let people = [];
+let settings = { mode: "drive", goal: "fair" };
+let isExample = false;
+let uid = 1;
+let G = null;          // road graph
+let result = null;     // computed analysis
+let busy = false;
+const anim = { running: false, phase: "idle", person: 0, drawn: 0, raf: 0 };
+const $ = (id) => document.getElementById(id);
+
+function save() {
+  try { localStorage.setItem("mitm.v1", JSON.stringify({ people, settings, isExample })); } catch (e) {}
+}
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem("mitm.v1"));
+    if (d && Array.isArray(d.people)) {
+      people = d.people.slice(0, MAX_PEOPLE).map((p) => ({ ...p, id: uid++ }));
+      settings = { ...settings, ...(d.settings || {}) };
+      isExample = !!d.isExample;
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+function freeColor() {
+  const used = new Set(people.map((p) => p.color));
+  return COLORS.find((c) => !used.has(c)) || COLORS[people.length % COLORS.length];
+}
+function initial(name) { return (name.trim()[0] || "?").toUpperCase(); }
+
+/* ---------------- map ---------------- */
+const map = L.map("map", { zoomControl: true, preferCanvas: false, worldCopyJump: true }).setView([43.71, -79.42], 11);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
+  subdomains: "abcd", maxZoom: 19, opacity: 0.55,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+}).addTo(map);
+map.createPane("flood").style.zIndex = 380;
+map.createPane("routes").style.zIndex = 420;
+const routeRenderer = L.svg({ pane: "routes", padding: 0.5 });
+
+const markers = new Map();
+function personIcon(p) {
+  return L.divIcon({
+    className: "", iconSize: [30, 30], iconAnchor: [15, 15],
+    html: `<div class="pin-avatar" style="--c:${p.color}">${escapeHtml(initial(p.name))}</div>`,
+  });
+}
+function syncMarkers() {
+  const ids = new Set(people.map((p) => p.id));
+  for (const [id, m] of markers) if (!ids.has(id)) { map.removeLayer(m); markers.delete(id); }
+  for (const p of people) {
+    let m = markers.get(p.id);
+    if (!m) {
+      m = L.marker([p.lat, p.lon], { icon: personIcon(p), draggable: true, zIndexOffset: 500 }).addTo(map);
+      m.on("dragend", async () => {
+        const ll = m.getLatLng();
+        p.lat = ll.lat; p.lon = ll.lng; p.label = "Dropped pin";
+        isExample = false; invalidate(); renderList(); save();
+        const lbl = await reverseLabel(p.lat, p.lon);
+        if (lbl) { p.label = lbl; renderList(); save(); }
+      });
+      markers.set(p.id, m);
+    }
+    m.setLatLng([p.lat, p.lon]);
+    m.setIcon(personIcon(p));
+    m.unbindTooltip();
+    const tag = result && result.dist ? `${p.name} · ${fmtResultShort(p.id)}` : `${p.name} · ${p.label}`;
+    m.bindTooltip(escapeHtml(tag), { permanent: true, direction: "top", offset: [0, -16], className: "tag" });
+    const el = m.getTooltip().getElement();
+    if (el) el.style.setProperty("--c", p.color);
+    m.getTooltip().on("add", (e) => e.target.getElement().style.setProperty("--c", p.color));
+  }
+}
+function fitToPeople() {
+  if (!people.length) return;
+  if (people.length === 1) return map.setView([people[0].lat, people[0].lon], 13);
+  map.fitBounds(L.latLngBounds(people.map((p) => [p.lat, p.lon])).pad(0.18));
+}
+
+/* ---------------- flood canvas layer ---------------- */
+const FloodLayer = L.Layer.extend({
+  onAdd(m) {
+    this._c = L.DomUtil.create("canvas", "flood-canvas");
+    m.getPane("flood").appendChild(this._c);
+    this._ctx = this._c.getContext("2d");
+    m.on("moveend resize", this.reset, this);
+    m.on("zoomstart", this._hide, this);
+    this.reset();
+  },
+  onRemove(m) {
+    m.off("moveend resize", this.reset, this);
+    m.off("zoomstart", this._hide, this);
+    this._c.remove();
+  },
+  _hide() { this._c.style.visibility = "hidden"; },
+  reset() {
+    const m = this._map, s = m.getSize(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this._c.width = s.x * dpr; this._c.height = s.y * dpr;
+    this._c.style.width = s.x + "px"; this._c.style.height = s.y + "px";
+    L.DomUtil.setPosition(this._c, m.containerPointToLayerPoint([0, 0]));
+    this._ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this._size = s;
+    projectNodes();
+    this._c.style.visibility = "";
+    redrawFull();
+  },
+});
+const flood = new FloodLayer();
+const ctx = () => flood._ctx;
+
+/* ---------------- UI: list ---------------- */
+function renderList() {
+  const ul = $("people");
+  ul.textContent = "";
+  if (!people.length) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "No one yet. Search for an address above or drop a pin on the map.";
+    ul.appendChild(li);
+  }
+  for (const p of people) {
+    const li = document.createElement("li");
+    li.className = "person";
+    li.style.setProperty("--c", p.color);
+    const av = document.createElement("div"); av.className = "avatar"; av.textContent = initial(p.name);
+    const who = document.createElement("div"); who.className = "who";
+    const inp = document.createElement("input");
+    inp.value = p.name; inp.id = "name-" + p.id; inp.setAttribute("aria-label", "Name");
+    inp.addEventListener("input", () => {
+      p.name = inp.value || "Someone"; av.textContent = initial(p.name);
+      syncMarkers(); if (result) renderResults(); save();
+    });
+    const where = document.createElement("div"); where.className = "where"; where.textContent = p.label;
+    where.title = p.label;
+    who.append(inp, where);
+    const x = document.createElement("button"); x.className = "x"; x.innerHTML = "&times;"; x.setAttribute("aria-label", "Remove " + p.name);
+    x.addEventListener("click", () => { people = people.filter((q) => q !== p); isExample = false; invalidate(); refresh(); });
+    li.append(av, who, x);
+    ul.appendChild(li);
+  }
+  $("count").textContent = `${people.length} / ${MAX_PEOPLE}`;
+  $("example").hidden = !isExample;
+  $("go").disabled = people.length < 2 || busy;
+  $("q").disabled = people.length >= MAX_PEOPLE;
+  $("q").placeholder = people.length >= MAX_PEOPLE ? "That's 10, the maximum" : "Search an address or place";
+  $("pick").disabled = people.length >= MAX_PEOPLE;
+  if (!result && !anim.running) setHud(people.length >= 2 ? `Where should ${people.length} friends meet?` : "Add at least two people", "");
+}
+function refresh() { renderList(); syncMarkers(); save(); }
+
+function addPerson(lat, lon, label) {
+  if (people.length >= MAX_PEOPLE) return null;
+  if (isExample) { people = []; isExample = false; }
+  const p = { id: uid++, name: `Person ${people.length + 1}`, label: label || "Dropped pin", lat, lon, color: freeColor() };
+  people.push(p);
+  invalidate();
+  refresh();
+  if (people.length > 1) fitToPeople(); else map.setView([lat, lon], 13);
+  setTimeout(() => { const el = $("name-" + p.id); if (el) { el.focus(); el.select(); } }, 30);
+  return p;
+}
+
+/* segmented controls */
+function bindSeg(id, key) {
+  const el = $(id);
+  const paint = () => el.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === settings[key]));
+  el.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b || busy) return;
+    if (settings[key] === b.dataset.v) return;
+    settings[key] = b.dataset.v; paint(); save();
+    if (key === "mode") invalidate();
+    else if (result && G) { chooseMeeting(); finishResult(); play(true); }
+    goalHint();
+  });
+  paint();
+}
+function goalHint() {
+  $("goal-hint").textContent = settings.goal === "fair"
+    ? "Keeps the longest trip as short as possible, so nobody gets stuck with a long trip."
+    : "Keeps everyone's combined travel as low as possible. Some people may travel more.";
+}
+
+/* ---------------- geocoding (Photon, Nominatim fallback) ---------------- */
+function photonLabel(pr) {
+  const main = pr.name || [pr.housenumber, pr.street].filter(Boolean).join(" ") || pr.city || "Unnamed place";
+  const rest = [pr.name && pr.street ? [pr.housenumber, pr.street].filter(Boolean).join(" ") : null, pr.district || pr.locality, pr.city, pr.state, pr.country]
+    .filter((v, i, a) => v && v !== main && a.indexOf(v) === i);
+  return { main, rest: rest.slice(0, 3).join(", ") };
+}
+async function geocode(q) {
+  const c = map.getCenter();
+  try {
+    const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lat=${c.lat.toFixed(3)}&lon=${c.lng.toFixed(3)}`);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    return j.features.map((f) => ({ ...photonLabel(f.properties), lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }));
+  } catch (e) {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    return j.map((x) => {
+      const parts = x.display_name.split(", ");
+      return { main: x.name || parts[0], rest: parts.slice(1, 4).join(", "), lat: +x.lat, lon: +x.lon };
+    });
+  }
+}
+async function reverseLabel(lat, lon, rich) {
+  try {
+    const r = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}&limit=1`);
+    const j = await r.json();
+    const pr = j.features[0] && j.features[0].properties;
+    if (!pr) throw 0;
+    if (rich) return { main: pr.name || pr.street || pr.district || pr.city, area: [pr.district || pr.locality, pr.city].filter(Boolean).join(", ") };
+    return pr.name || [pr.housenumber, pr.street].filter(Boolean).join(" ") || pr.district || pr.city || "Dropped pin";
+  } catch (e) {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&lat=${lat}&lon=${lon}`);
+      const j = await r.json(); const a = j.address || {};
+      const main = j.name || a.road || a.neighbourhood || a.suburb;
+      if (rich) return { main, area: [a.suburb || a.neighbourhood, a.city || a.town].filter(Boolean).join(", ") };
+      return main || "Dropped pin";
+    } catch (e2) { return rich ? null : null; }
+  }
+}
+
+let suggestions = [], activeIdx = -1, qTimer = 0, qSeq = 0;
+$("q").addEventListener("input", () => {
+  clearTimeout(qTimer);
+  const q = $("q").value.trim();
+  if (q.length < 3) { $("suggest").hidden = true; return; }
+  qTimer = setTimeout(async () => {
+    const seq = ++qSeq;
+    showSuggest(null, "Searching…");
+    try {
+      const res = await geocode(q);
+      if (seq !== qSeq) return;
+      showSuggest(res, res.length ? "" : "No matches. Try adding a city.");
+    } catch (e) {
+      if (seq === qSeq) showSuggest(null, "Search is unavailable right now. Drop a pin on the map instead.");
+    }
+  }, 320);
+});
+$("q").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (!suggestions.length) return;
+    e.preventDefault();
+    activeIdx = (activeIdx + (e.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length;
+    paintActive();
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (suggestions.length) choose(suggestions[Math.max(0, activeIdx)]);
+  } else if (e.key === "Escape") { $("suggest").hidden = true; }
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".search")) $("suggest").hidden = true; });
+function showSuggest(list, msg) {
+  const ul = $("suggest"); ul.textContent = ""; suggestions = list || []; activeIdx = -1;
+  if (msg) { const li = document.createElement("li"); li.className = "msg"; li.textContent = msg; ul.appendChild(li); }
+  suggestions.forEach((s) => {
+    const li = document.createElement("li"); const b = document.createElement("button");
+    const t = document.createElement("b"); t.textContent = s.main;
+    const sm = document.createElement("small"); sm.textContent = s.rest;
+    b.append(t, sm); b.addEventListener("click", () => choose(s));
+    li.appendChild(b); ul.appendChild(li);
+  });
+  ul.hidden = false;
+}
+function paintActive() { $("suggest").querySelectorAll("button").forEach((b, i) => b.classList.toggle("active", i === activeIdx)); }
+function choose(s) {
+  $("suggest").hidden = true; $("q").value = "";
+  addPerson(s.lat, s.lon, s.main);
+}
+
+/* pin-drop mode */
+let picking = false;
+function setPicking(v) { picking = v; $("pick").setAttribute("aria-pressed", v); document.body.classList.toggle("picking", v); $("pick").textContent = v ? "Tap the map… (cancel)" : "Drop a pin on the map"; }
+$("pick").addEventListener("click", () => setPicking(!picking));
+map.on("click", async (e) => {
+  if (!picking) return;
+  setPicking(false);
+  const p = addPerson(e.latlng.lat, e.latlng.lng, "Dropped pin");
+  if (!p) return;
+  const lbl = await reverseLabel(p.lat, p.lon);
+  if (lbl) { p.label = lbl; refresh(); }
+});
+$("clear").addEventListener("click", () => { people = []; isExample = false; invalidate(); refresh(); $("q").focus(); });
+
+/* ---------------- road network ---------------- */
+
+function hav(a1, o1, a2, o2) {
+  const R = 6371008, r = Math.PI / 180;
+  const dA = (a2 - a1) * r, dO = (o2 - o1) * r;
+  const h = Math.sin(dA / 2) ** 2 + Math.cos(a1 * r) * Math.cos(a2 * r) * Math.sin(dO / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function planQuery(mode) {
+  let s = 90, w = 180, n = -90, e = -180;
+  for (const p of people) { s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lon); e = Math.max(e, p.lon); }
+  const spanKm = hav(s, w, n, e) / 1000;
+  const padLat = Math.max((n - s) * 0.12, 0.015), padLon = Math.max((e - w) * 0.12, 0.015 / Math.cos(((s + n) / 2) * Math.PI / 180));
+  const bbox = [s - padLat, w - padLon, n + padLat, e + padLon];
+  const D = hav(bbox[0], bbox[1], bbox[2], bbox[3]) / 1000;
+  const links = "motorway_link|trunk_link|primary_link|secondary_link|tertiary_link";
+  let classes, tier;
+  if (mode === "drive") {
+    if (D <= 32) { classes = `motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|${links}`; tier = "every street"; }
+    else if (D <= 90) { classes = `motorway|trunk|primary|secondary|tertiary|${links}`; tier = "main roads (people are spread out, so side streets were skipped)"; }
+    else if (D <= 260) { classes = "motorway|trunk|primary|motorway_link|trunk_link|primary_link"; tier = "highways and major roads only (people are far apart)"; }
+    else return { error: `These locations span about ${Math.round(spanKm)} km. That's too much road to download in a browser. Try a group within about 200 km of each other.` };
+  } else {
+    if (D <= 12) { classes = "trunk|primary|secondary|tertiary|unclassified|residential|living_street|pedestrian|footway|path|steps|cycleway|service|track|" + links.replace("motorway_link|", ""); tier = "every street and footpath"; }
+    else if (D <= 32) { classes = "trunk|primary|secondary|tertiary|unclassified|residential|living_street|pedestrian"; tier = "streets only (footpaths skipped to keep the download small)"; }
+    else return { error: `These locations span about ${Math.round(spanKm)} km, which is a long walk. Switch to Car for groups this spread out.` };
+  }
+  const q = `[out:json][timeout:120][maxsize:1073741824];way["highway"~"^(${classes})$"](${bbox.map((v) => v.toFixed(5)).join(",")});out body geom qt;`;
+  return { q, bbox, tier, spanKm };
+}
+
+async function fetchRoads(q, onStage) {
+  let lastErr;
+  for (const url of OVERPASS) {
+    try {
+      onStage(`Downloading the road network from OpenStreetMap…`);
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      if (!r.ok) throw new Error(`server said ${r.status}`);
+      const j = await r.json();
+      if (j.remark && /error|timed out|out of memory/i.test(j.remark)) throw new Error(j.remark);
+      if (!j.elements || !j.elements.length) throw new Error("no roads found in this area");
+      return j.elements;
+    } catch (e) { lastErr = e; }
+  }
+  throw new Error(`Couldn't download road data (${lastErr && lastErr.message}). The free map servers may be busy; wait a minute and try again.`);
+}
+
+function onewayDir(t) {
+  const o = t.oneway;
+  if (o === "no" || o === "false" || o === "0") return 0;
+  if (o === "-1" || o === "reverse") return -1;
+  if (o === "yes" || o === "true" || o === "1") return 1;
+  if (t.junction === "roundabout" || t.junction === "circular") return 1;
+  if (t.highway === "motorway") return 1;
+  return 0;
+}
+const DEFAULT_KMH = { motorway: 100, motorway_link: 60, trunk: 80, trunk_link: 50, primary: 60, primary_link: 45, secondary: 50, secondary_link: 40, tertiary: 45, tertiary_link: 35, unclassified: 40, residential: 30, living_street: 10 };
+function driveSpeed(t) {
+  let kmh = NaN;
+  if (t.maxspeed) {
+    kmh = parseFloat(t.maxspeed);
+    if (/mph/.test(t.maxspeed)) kmh *= 1.609;
+  }
+  if (!(kmh > 4 && kmh < 200)) kmh = DEFAULT_KMH[t.highway] || 35;
+  return (kmh / 3.6) * 0.8; // real trips run slower than the posted limit
+}
+
+function buildGraph(ways, mode) {
+  const idx = new Map();
+  const lat = [], lon = [];
+  const eF = [], eT = [], eC = [], eL = [];
+  const sA = [], sB = [];
+  for (const w of ways) {
+    if (w.type !== "way" || !w.nodes || !w.geometry) continue;
+    const t = w.tags || {};
+    if (t.area === "yes") continue;
+    if (mode === "drive" && (t.access === "no" || t.access === "private" || t.motor_vehicle === "no" || t.motorcar === "no")) continue;
+    if (mode === "walk" && (t.foot === "no" || t.access === "private" || t.access === "no")) continue;
+    const speed = mode === "walk" ? WALK_MS : driveSpeed(t);
+    const ow = mode === "drive" ? onewayDir(t) : 0;
+    let prev = -1, pLat = 0, pLon = 0;
+    for (let k = 0; k < w.nodes.length; k++) {
+      const g = w.geometry[k];
+      if (!g) { prev = -1; continue; }
+      let i = idx.get(w.nodes[k]);
+      if (i === undefined) { i = lat.length; idx.set(w.nodes[k], i); lat.push(g.lat); lon.push(g.lon); }
+      if (prev >= 0 && prev !== i) {
+        const d = hav(pLat, pLon, g.lat, g.lon), c = d / speed;
+        sA.push(prev); sB.push(i);
+        if (ow >= 0) { eF.push(prev); eT.push(i); eC.push(c); eL.push(d); }
+        if (ow <= 0) { eF.push(i); eT.push(prev); eC.push(c); eL.push(d); }
+      }
+      prev = i; pLat = g.lat; pLon = g.lon;
+    }
+  }
+  const n = lat.length, m = eF.length;
+  const off = new Uint32Array(n + 1);
+  for (let k = 0; k < m; k++) off[eF[k] + 1]++;
+  for (let i = 0; i < n; i++) off[i + 1] += off[i];
+  const fill = off.slice(0, n), to = new Int32Array(m), cost = new Float64Array(m), len = new Float64Array(m);
+  for (let k = 0; k < m; k++) { const p = fill[eF[k]]++; to[p] = eT[k]; cost[p] = eC[k]; len[p] = eL[k]; }
+
+  // weakly connected components (union-find), keep the biggest for snapping
+  const par = new Int32Array(n); for (let i = 0; i < n; i++) par[i] = i;
+  const find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+  for (let k = 0; k < sA.length; k++) { const a = find(sA[k]), b = find(sB[k]); if (a !== b) par[a] = b; }
+  const size = new Map(); let best = -1, bestN = 0;
+  for (let i = 0; i < n; i++) { const r = find(i); const c = (size.get(r) || 0) + 1; size.set(r, c); if (c > bestN) { bestN = c; best = r; } }
+  const inMain = new Uint8Array(n); for (let i = 0; i < n; i++) inMain[i] = find(i) === best ? 1 : 0;
+
+  return {
+    n, lat: Float64Array.from(lat), lon: Float64Array.from(lon), off, to, cost, len, inMain,
+    sA: Int32Array.from(sA), sB: Int32Array.from(sB), S: sA.length,
+    px: new Float32Array(n), py: new Float32Array(n),
+  };
+}
+
+function snap(G, lat, lon) {
+  const k = Math.cos(lat * Math.PI / 180);
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < G.n; i++) {
+    if (!G.inMain[i]) continue;
+    const dy = G.lat[i] - lat, dx = (G.lon[i] - lon) * k, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+
+function dijkstra(G, src) {
+  const n = G.n, dist = new Float64Array(n).fill(Infinity), meters = new Float64Array(n), pred = new Int32Array(n).fill(-1);
+  const hk = [], hv = [];
+  const push = (k, v) => {
+    let i = hk.length; hk.push(k); hv.push(v);
+    while (i > 0) { const p = (i - 1) >> 1; if (hk[p] <= k) break; hk[i] = hk[p]; hv[i] = hv[p]; i = p; }
+    hk[i] = k; hv[i] = v;
+  };
+  const pop = () => {
+    const top = hv[0], lk = hk.pop(), lv = hv.pop(), N = hk.length;
+    if (N) {
+      let i = 0;
+      for (;;) {
+        let c = 2 * i + 1; if (c >= N) break;
+        if (c + 1 < N && hk[c + 1] < hk[c]) c++;
+        if (hk[c] >= lk) break;
+        hk[i] = hk[c]; hv[i] = hv[c]; i = c;
+      }
+      hk[i] = lk; hv[i] = lv;
+    }
+    return top;
+  };
+  dist[src] = 0; push(0, src);
+  const done = new Uint8Array(n);
+  while (hk.length) {
+    const d0 = hk[0], u = pop();
+    if (done[u]) continue; done[u] = 1;
+    for (let e = G.off[u], end = G.off[u + 1]; e < end; e++) {
+      const v = G.to[e], nd = d0 + G.cost[e];
+      if (nd < dist[v]) { dist[v] = nd; meters[v] = meters[u] + G.len[e]; pred[v] = u; push(nd, v); }
+    }
+  }
+  return { dist, meters, pred };
+}
+
+function sortedOrder(keys) {
+  const idx = [];
+  for (let s = 0; s < keys.length; s++) if (keys[s] < Infinity) idx.push(s);
+  const order = Uint32Array.from(idx);
+  order.sort((a, b) => keys[a] - keys[b]);
+  const sk = new Float64Array(order.length);
+  for (let i = 0; i < order.length; i++) sk[i] = keys[order[i]];
+  return { order, keys: sk };
+}
+
+const tick = () => new Promise((r) => setTimeout(r, 16));
+
+async function analyze() {
+  if (busy || people.length < 2) return;
+  stopAnim(); clearRoutes();
+  const plan = planQuery(settings.mode);
+  if (plan.error) return setStatus(plan.error, "err");
+  busy = true; renderList();
+  try {
+    const ways = await fetchRoads(plan.q, (m) => setStatus(m, "busy"));
+    setStatus(`Building a network from ${ways.length.toLocaleString()} roads…`, "busy"); await tick();
+    G = buildGraph(ways, settings.mode);
+    projectNodes();
+    const R = { mode: settings.mode, tier: plan.tier, src: [], flood: [], snapWarn: [] };
+    for (const p of people) {
+      const s = snap(G, p.lat, p.lon);
+      R.src.push(s);
+      const off = hav(p.lat, p.lon, G.lat[s], G.lon[s]);
+      if (off > 1500) R.snapWarn.push(`${p.name} is ${(off / 1000).toFixed(1)} km from the nearest mapped road`);
+    }
+    for (let i = 0; i < people.length; i++) {
+      setStatus(`Flooding the streets from ${people[i].name} (${i + 1} of ${people.length})…`, "busy"); await tick();
+      const d = dijkstra(G, R.src[i]);
+      const keys = new Float64Array(G.S);
+      for (let s = 0; s < G.S; s++) keys[s] = Math.min(d.dist[G.sA[s]], d.dist[G.sB[s]]);
+      R.flood.push({ ...d, ...sortedOrder(keys) });
+    }
+    setStatus("Finding where the floods meet…", "busy"); await tick();
+    const allKeys = new Float64Array(G.S), owner = new Uint8Array(G.S);
+    for (let s = 0; s < G.S; s++) {
+      let bk = Infinity, bo = 0;
+      for (let i = 0; i < R.flood.length; i++) {
+        const f = R.flood[i], k = Math.min(f.dist[G.sA[s]], f.dist[G.sB[s]]);
+        if (k < bk) { bk = k; bo = i; }
+      }
+      allKeys[s] = bk; owner[s] = bo;
+    }
+    R.all = sortedOrder(allKeys); R.owner = owner;
+    R.people = people.map((p) => ({ id: p.id, name: p.name, color: p.color, lat: p.lat, lon: p.lon }));
+    result = R;
+    if (!chooseMeeting()) throw new Error("There's no road route that connects everyone. Check that every pin is on the same landmass, or try Car mode.");
+    setStatus("", "");
+    finishResult();
+    play(false);
+  } catch (e) {
+    result = null;
+    setStatus(e.message || String(e), "err");
+    setHud(`Where should ${people.length} friends meet?`, "");
+  } finally {
+    busy = false; renderList();
+  }
+}
+
+function chooseMeeting() {
+  const R = result, F = R.flood;
+  let best = -1, bMax = Infinity, bSum = Infinity;
+  const fair = settings.goal === "fair";
+  outer: for (let v = 0; v < G.n; v++) {
+    let mx = 0, sm = 0;
+    for (let i = 0; i < F.length; i++) {
+      const d = F[i].dist[v];
+      if (d === Infinity) continue outer;
+      if (d > mx) mx = d; sm += d;
+    }
+    if (fair ? (mx < bMax - 1e-9 || (Math.abs(mx - bMax) <= 1e-9 && sm < bSum)) : (sm < bSum - 1e-9 || (Math.abs(sm - bSum) <= 1e-9 && mx < bMax))) { best = v; bMax = mx; bSum = sm; }
+  }
+  if (best < 0) return false;
+  R.goal = settings.goal;
+  R.meet = best;
+  R.dist = F.map((f) => ({ secs: f.dist[best], meters: f.meters[best] }));
+  R.paths = F.map((f) => {
+    const pts = []; let v = best;
+    while (v >= 0) { pts.push([G.lat[v], G.lon[v]]); v = f.pred[v]; }
+    return pts.reverse();
+  });
+  R.place = null;
+  return true;
+}
+
+async function finishResult() {
+  const R = result;
+  renderResults();
+  syncMarkers();
+  const lat = G.lat[R.meet], lon = G.lon[R.meet];
+  const place = await reverseLabel(lat, lon, true);
+  if (result !== R) return;
+  R.place = place && place.main ? place : { main: `${lat.toFixed(4)}, ${lon.toFixed(4)}`, area: "" };
+  renderResults();
+  if (anim.phase === "done") showMeetMarker();
+}
+
+/* ---------------- results panel ---------------- */
+function fmtKm(m) { return m < 950 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`; }
+function fmtMin(s) { const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; }
+function fmtResultShort(id) {
+  const i = result.people.findIndex((p) => p.id === id);
+  if (i < 0) return "";
+  return result.mode === "walk" ? `${fmtKm(result.dist[i].meters)}` : `${fmtKm(result.dist[i].meters)}`;
+}
+function renderResults() {
+  const R = result, box = $("results");
+  if (!R || !R.dist) { box.hidden = true; return; }
+  const lat = G.lat[R.meet], lon = G.lon[R.meet];
+  const ll = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+  const travel = R.mode === "walk" ? "walking" : "driving";
+  const secs = R.dist.map((d) => d.secs);
+  const mx = Math.max(...secs), mn = Math.min(...secs), tot = secs.reduce((a, b) => a + b, 0);
+  const name = R.place ? R.place.main : "Finding the place name…";
+  const area = R.place && R.place.area ? R.place.area + " · " : "";
+  const rows = R.people.map((p, i) => {
+    const cur = people.find((q) => q.id === p.id);
+    const nm = cur ? cur.name : p.name;
+    const dir = `https://www.google.com/maps/dir/?api=1&origin=${p.lat.toFixed(5)},${p.lon.toFixed(5)}&destination=${ll}&travelmode=${travel}`;
+    return `<tr class="${secs[i] === mx ? "longest" : ""}"><td><span class="dot" style="--c:${p.color}"></span>${escapeHtml(nm)}</td>
+      <td class="num">${fmtMin(R.dist[i].secs)}</td><td class="num">${fmtKm(R.dist[i].meters)}</td>
+      <td class="num"><a href="${dir}" target="_blank" rel="noopener">Route</a></td></tr>`;
+  }).join("");
+  box.innerHTML = `
+    <div>
+      <span class="label">Meet near</span>
+      <div class="meet-name">${escapeHtml(name)}</div>
+      <div class="meet-sub">${escapeHtml(area)}<span style="font-family:var(--f-mono)">${ll}</span></div>
+    </div>
+    <div class="actions">
+      <a href="https://www.google.com/maps/search/?api=1&query=${ll}" target="_blank" rel="noopener">Open in Google Maps</a>
+      <a href="https://www.google.com/maps/search/cafes+restaurants/@${ll},16z" target="_blank" rel="noopener">Cafés nearby</a>
+      <button id="copy">Copy coordinates</button>
+    </div>
+    <table><tbody>${rows}</tbody></table>
+    <p class="note">${R.goal === "fair" ? `Longest trip ${fmtMin(mx)}. Gap between the longest and shortest trip: ${fmtMin(mx - mn)}.` : `Total travel for everyone: ${fmtMin(tot)}. Longest single trip: ${fmtMin(mx)}.`}
+    Times are estimates for ${travel} along ${escapeHtml(R.tier)}, without live traffic.${R.snapWarn.length ? " " + escapeHtml(R.snapWarn.join("; ")) + "." : ""}</p>`;
+  box.hidden = false;
+  $("copy").addEventListener("click", async (e) => {
+    try { await navigator.clipboard.writeText(ll); e.target.textContent = "Copied"; }
+    catch (err) { e.target.textContent = ll; }
+  });
+}
+
+function setStatus(msg, kind) {
+  const el = $("status");
+  el.hidden = !msg; el.className = kind === "err" ? "err" : "";
+  el.innerHTML = (kind === "busy" ? '<span class="spin"></span>' : "") + `<span>${escapeHtml(msg)}</span>`;
+}
+function setHud(h, s, color, count) {
+  $("hud-h").innerHTML = escapeHtml(h) + (count != null ? `<span class="n">· ${count.toLocaleString()} <small>roads</small></span>` : "");
+  $("hud-h").style.setProperty("--hc", color || "var(--accent)");
+  $("hud-s").textContent = s || "";
+}
+function invalidate() {
+  if (!result && !G) return;
+  stopAnim(); result = null; G = null; clearRoutes(); redrawFull();
+  $("results").hidden = true; $("replay").hidden = true; setStatus("", "");
+}
+
+/* ---------------- drawing ---------------- */
+function projectNodes() {
+  if (!G || !flood._map) return;
+  const z = map.getZoom(), sc = 256 * Math.pow(2, z), o = map.getPixelBounds().min, r = Math.PI / 180;
+  for (let i = 0; i < G.n; i++) {
+    G.px[i] = ((G.lon[i] + 180) / 360) * sc - o.x;
+    const s = Math.sin(G.lat[i] * r);
+    G.py[i] = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * sc - o.y;
+  }
+}
+function lineW() { const z = map.getZoom(); return Math.max(0.55, Math.min(2.4, (z - 9.5) * 0.42)); }
+
+function strokeSegs(c, list, from, to, color, alpha, width) {
+  if (to <= from) return;
+  c.strokeStyle = color; c.globalAlpha = alpha; c.lineWidth = width;
+  const { px, py, sA, sB } = G;
+  let k = from;
+  while (k < to) {
+    const end = Math.min(to, k + 8000);
+    c.beginPath();
+    for (; k < end; k++) { const s = list ? list[k] : k; c.moveTo(px[sA[s]], py[sA[s]]); c.lineTo(px[sB[s]], py[sB[s]]); }
+    c.stroke();
+  }
+}
+function strokeOwned(c, from, to, alpha, width) {
+  if (to <= from) return;
+  const { px, py, sA, sB } = G, order = result.all.order, owner = result.owner;
+  const paths = result.people.map(() => new Path2D());
+  for (let k = from; k < to; k++) { const s = order[k], p = paths[owner[s]]; p.moveTo(px[sA[s]], py[sA[s]]); p.lineTo(px[sB[s]], py[sB[s]]); }
+  c.globalAlpha = alpha; c.lineWidth = width;
+  paths.forEach((p, i) => { c.strokeStyle = result.people[i].color; c.stroke(p); });
+}
+function drawBase(c) {
+  c.globalCompositeOperation = "source-over";
+  c.clearRect(0, 0, flood._size.x, flood._size.y);
+  if (!G) return;
+  strokeSegs(c, null, 0, G.S, getComputedStyle(document.documentElement).getPropertyValue("--road").trim() || "#1d3b2f", 0.9, lineW() * 0.8);
+}
+function drawRange(from, to) {
+  const c = ctx(); if (!c || !G || !result) return;
+  const w = lineW();
+  c.globalCompositeOperation = "lighter";
+  if (anim.phase === "solo") {
+    const f = result.flood[anim.person], col = result.people[anim.person].color;
+    strokeSegs(c, f.order, from, to, col, 0.85, w);
+  } else if (anim.phase === "all" || anim.phase === "routes" || anim.phase === "done") {
+    const dim = anim.phase === "all" ? 0.85 : 0.42;
+    strokeOwned(c, from, to, dim, w);
+  }
+  c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
+}
+function redrawFull() {
+  const c = ctx(); if (!c || !flood._size) return;
+  c.setTransform(Math.min(window.devicePixelRatio || 1, 2), 0, 0, Math.min(window.devicePixelRatio || 1, 2), 0, 0);
+  drawBase(c);
+  if (G && result && anim.phase !== "idle") drawRange(0, anim.drawn);
+}
+
+/* ---------------- animation ---------------- */
+let routeLayers = [], meetMarker = null;
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function stopAnim() { cancelAnimationFrame(anim.raf); anim.running = false; anim.phase = "idle"; anim.drawn = 0; $("replay").hidden = true; }
+function clearRoutes() {
+  routeLayers.forEach((l) => map.removeLayer(l)); routeLayers = [];
+  if (meetMarker) { map.removeLayer(meetMarker); meetMarker = null; }
+}
+function upperBound(arr, x) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m] <= x) lo = m + 1; else hi = m; } return lo; }
+const easeOut = (u) => 1 - Math.pow(1 - u, 1.6);
+
+function play(skipSolo) {
+  stopAnim(); clearRoutes();
+  const R = result, N = R.people.length;
+  const fair = R.goal === "fair";
+  // flood until a little past the meeting point so the overlap is visible
+  const limitAll = Math.min(R.all.keys[R.all.keys.length - 1] || 0, Math.max(...R.dist.map((d) => d.secs)) * 1.35);
+  const phases = [];
+  if (!skipSolo && !reduceMotion) {
+    const per = Math.max(1.1, Math.min(2.4, 9 / N));
+    for (let i = 0; i < N; i++) phases.push({ type: "solo", person: i, dur: per });
+  }
+  if (!reduceMotion) phases.push({ type: "all", dur: 3.6 }, { type: "routes", dur: 1.6 });
+  phases.push({ type: "done", dur: 0 });
+  let pi = -1, t0 = 0;
+  anim.running = true;
+  $("replay").hidden = true;
+
+  const enter = (ph) => {
+    anim.phase = ph.type === "routes" ? "routes" : ph.type; anim.person = ph.person || 0;
+    if (ph.type === "solo") { anim.drawn = 0; redrawFull(); }
+    if (ph.type === "all") { anim.drawn = 0; redrawFull(); }
+    if (ph.type === "routes") { anim.drawn = upperBound(R.all.keys, limitAll); redrawFull(); startRoutes(); }
+    if (ph.type === "done") {
+      anim.drawn = upperBound(R.all.keys, limitAll); redrawFull();
+      if (!routeLayers.length) startRoutes(); setRouteProgress(1); showMeetMarker();
+      anim.running = false; $("replay").hidden = false;
+      const nm = R.place ? R.place.main : "the middle";
+      setHud(`Meet near ${nm}`, fair ? "The fairest spot for everyone" : "The spot with the least total travel", "#ffffff");
+    }
+  };
+  const frame = (now) => {
+    if (!anim.running) return;
+    if (pi < 0 || (now - t0) / 1000 >= phases[pi].dur) {
+      pi++; t0 = now; enter(phases[pi]);
+      if (!anim.running) return;
+    }
+    const ph = phases[pi], u = Math.min(1, (now - t0) / 1000 / ph.dur);
+    if (ph.type === "solo") {
+      const f = R.flood[ph.person], max = f.keys[f.keys.length - 1] || 0;
+      const target = upperBound(f.keys, max * easeOut(u));
+      drawRange(anim.drawn, target); anim.drawn = target;
+      setHud("One by one", `Search ${ph.person + 1} of ${N} · ${R.people[ph.person].name}`, R.people[ph.person].color, target);
+    } else if (ph.type === "all") {
+      const target = upperBound(R.all.keys, limitAll * easeOut(u));
+      drawRange(anim.drawn, target); anim.drawn = target;
+      setHud("All at once", "Floods cross", "#ffffff", target);
+    } else if (ph.type === "routes") {
+      setRouteProgress(easeOut(u));
+      setHud("Following each route in", "", "#ffffff");
+    }
+    anim.raf = requestAnimationFrame(frame);
+  };
+  anim.raf = requestAnimationFrame(frame);
+}
+function startRoutes() {
+  routeLayers = [];
+  result.paths.forEach((pts, i) => {
+    const col = result.people[i].color;
+    const glow = L.polyline([], { renderer: routeRenderer, color: col, weight: 9, opacity: 0.35, className: "route-glow", interactive: false }).addTo(map);
+    const core = L.polyline([], { renderer: routeRenderer, color: col, weight: 3.2, opacity: 1, interactive: false, lineCap: "round", lineJoin: "round" }).addTo(map);
+    glow._pts = pts; core._pts = pts;
+    routeLayers.push(glow, core);
+  });
+}
+function setRouteProgress(u) {
+  routeLayers.forEach((l) => l.setLatLngs(l._pts.slice(0, Math.max(1, Math.ceil(l._pts.length * u)))));
+}
+function showMeetMarker() {
+  if (!result || !G) return;
+  const ll = [G.lat[result.meet], G.lon[result.meet]];
+  if (meetMarker) map.removeLayer(meetMarker);
+  meetMarker = L.marker(ll, {
+    zIndexOffset: 1000, interactive: false,
+    icon: L.divIcon({ className: "", iconSize: [38, 38], iconAnchor: [19, 40], html: '<div class="meet-pin"><span>★</span></div>' }),
+  }).addTo(map);
+  meetMarker.bindTooltip(escapeHtml(result.place ? result.place.main : "Meet here"), { permanent: true, direction: "bottom", offset: [0, 6], className: "meet-tag" });
+}
+$("replay").addEventListener("click", () => { if (result) play(false); });
+$("go").addEventListener("click", analyze);
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+/* ---------------- boot ---------------- */
+if (!load() || !people.length) {
+  people = EXAMPLE.map((p, i) => ({ ...p, id: uid++, color: COLORS[i] }));
+  isExample = true;
+}
+flood.addTo(map);
+bindSeg("mode", "mode"); bindSeg("goal", "goal"); goalHint();
+refresh();
+fitToPeople();
+</script>
+</body>
+</html>
