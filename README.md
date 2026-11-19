@@ -10,11 +10,10 @@ Open `index.html` in a browser, or use the GitHub Pages link.
 
 ## Pre-loaded road maps
 
-When everyone is inside a pre-built region, the app loads `data/<region>.bin` once and runs the whole street-by-street flood in the browser, with no live servers needed. Outside those regions it falls back to the free OSRM routing service.
+When everyone is inside the pre-built area, the app reads `data/manifest.json`, downloads only the road tiles around the group (each tile is 0.5° square, about 50 km), and runs the whole street-by-street flood in the browser, with no live servers needed. Outside that area it falls back to the free OSRM routing service.
 
-Current regions:
-- **Greater Toronto Area**: Niagara to Oshawa, north to about Newmarket and Uxbridge
+Current coverage: **Southern Ontario**, from Windsor to Ottawa and Cornwall, north to about Muskoka (41.6–45.7°N, 83.2–74.3°W).
 
-The `Build road maps` GitHub Action (`.github/workflows/build-maps.yml`) downloads Ontario from Geofabrik, cuts out the region, and runs `tools/build_region.py`. It runs monthly, or on demand from the Actions tab. To add a region, add a build step to the workflow and an entry to `REGIONS` in `index.html`.
+The `Build road maps` GitHub Action (`.github/workflows/build-maps.yml`) downloads Ontario from Geofabrik, falling back to tiled Overpass downloads if Geofabrik is unreachable. It runs `tools/build_region.py`, which writes the tiles and manifest into `data/`. It runs monthly, or on demand from the Actions tab.
 
 Map data © OpenStreetMap contributors (ODbL).

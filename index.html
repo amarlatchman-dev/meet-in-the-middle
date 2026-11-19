@@ -663,65 +663,83 @@ function sortedOrder(keys) {
 const tick = () => new Promise((r) => setTimeout(r, 16));
 
 /* ---------------- pre-built regional road maps ---------------- */
-// Built by tools/build_region.py via the "Build road maps" GitHub Action.
-const REGIONS = [
-  { id: "gta", name: "Greater Toronto Area", bbox: [42.85, -80.25, 44.15, -78.65], file: "data/gta.bin" },
-];
-const regionCache = {};
-function regionFor(ps) {
-  return REGIONS.find((r) => ps.every((p) => p.lat >= r.bbox[0] && p.lat <= r.bbox[2] && p.lon >= r.bbox[1] && p.lon <= r.bbox[3]));
+// Built by tools/build_region.py via the "Build road maps" GitHub Action:
+// data/manifest.json lists road tiles; only the tiles around the group are downloaded.
+let manifestP = null;
+const tileCache = {};
+function loadManifest() {
+  if (!manifestP) manifestP = fetch("data/manifest.json").then((r) => { if (!r.ok) throw new Error("no pre-built maps"); return r.json(); })
+    .catch((e) => { manifestP = null; throw e; });
+  return manifestP;
 }
-function loadRegion(r, onProgress) {
-  if (!regionCache[r.id]) {
-    regionCache[r.id] = (async () => {
-      const res = await fetch(r.file);
-      if (!res.ok) throw new Error(`map file missing (${res.status})`);
-      const total = +res.headers.get("content-length") || 0;
-      let buf;
-      if (res.body && res.body.getReader) {
-        const reader = res.body.getReader(), parts = [];
-        let got = 0;
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          parts.push(value); got += value.length;
-          onProgress && onProgress(got, total);
-        }
-        const all = new Uint8Array(got); let o = 0;
-        for (const p of parts) { all.set(p, o); o += p.length; }
-        buf = all.buffer;
-      } else buf = await res.arrayBuffer();
-      const dv = new DataView(buf);
-      if (String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== "MITM") throw new Error("map file is damaged");
-      const N = dv.getUint32(8, true), E = dv.getUint32(12, true);
-      let off = 16;
-      const take = (T, n, bytes) => { const a = new T(buf, off, n); off += n * bytes; return a; };
-      const D = { N, E };
-      D.lat = take(Int32Array, N, 4); D.lon = take(Int32Array, N, 4);
-      D.a = take(Uint32Array, E, 4); D.b = take(Uint32Array, E, 4); D.len = take(Float32Array, E, 4);
-      D.cls = take(Uint8Array, E, 1); D.ow = take(Int8Array, E, 1); D.spd = take(Uint8Array, E, 1);
-      return D;
-    })().catch((e) => { delete regionCache[r.id]; throw e; });
+function inBox(b, la, lo) { return la >= b[0] && la <= b[2] && lo >= b[1] && lo <= b[3]; }
+function boxesOverlap(a, b) { return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]; }
+async function fetchBytes(url, onBytes) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`map tile missing (${res.status})`);
+  if (!(res.body && res.body.getReader)) { const b = await res.arrayBuffer(); onBytes(b.byteLength); return b; }
+  const reader = res.body.getReader(), parts = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value); got += value.length; onBytes(value.length);
   }
-  return regionCache[r.id];
+  const all = new Uint8Array(got); let o = 0;
+  for (const p of parts) { all.set(p, o); o += p.length; }
+  return all.buffer;
+}
+function parseTile(buf) {
+  const dv = new DataView(buf);
+  if (String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== "MITM") throw new Error("map tile is damaged");
+  const N = dv.getUint32(8, true), E = dv.getUint32(12, true);
+  let off = 16;
+  const take = (T, n, bytes) => { const a = new T(buf, off, n); off += n * bytes; return a; };
+  const D = { N, E };
+  D.lat = take(Int32Array, N, 4); D.lon = take(Int32Array, N, 4);
+  D.a = take(Uint32Array, E, 4); D.b = take(Uint32Array, E, 4); D.len = take(Float32Array, E, 4);
+  D.cls = take(Uint8Array, E, 1); D.ow = take(Int8Array, E, 1); D.spd = take(Uint8Array, E, 1);
+  return D;
+}
+async function loadTiles(tiles, onProgress) {
+  const total = tiles.reduce((t, x) => t + (tileCache[x.file] ? 0 : x.bytes), 0);
+  let got = 0;
+  return Promise.all(tiles.map((t) => {
+    if (!tileCache[t.file]) {
+      tileCache[t.file] = fetchBytes(t.file.startsWith("data/") ? t.file : "data/" + t.file, (n) => { got += n; onProgress(got, total); })
+        .then(parseTile).catch((e) => { delete tileCache[t.file]; throw e; });
+    }
+    return tileCache[t.file];
+  }));
 }
 const CLASS_KMH = [100, 80, 60, 50, 45, 40, 30, 10, 60, 50, 45, 40, 35, 5];
-function buildLocalGraph(D, bbox, mode) {
+function buildLocalGraph(tiles, bbox, mode) {
   const [s, w, n, e] = bbox.map((v) => Math.round(v * 1e6));
-  const local = new Int32Array(D.N).fill(-1);
+  const merged = new Map();
   const lat = [], lon = [], sA = [], sB = [], eF = [], eT = [], eC = [], eL = [];
-  const inBox = (i) => D.lat[i] >= s && D.lat[i] <= n && D.lon[i] >= w && D.lon[i] <= e;
-  const L = (i) => { if (local[i] < 0) { local[i] = lat.length; lat.push(D.lat[i] / 1e6); lon.push(D.lon[i] / 1e6); } return local[i]; };
-  for (let k = 0; k < D.E; k++) {
-    const a = D.a[k], b = D.b[k], c = D.cls[k];
-    if (!inBox(a) && !inBox(b)) continue;
-    if (mode === "walk" ? (c === 0 || c === 8) : c === 13) continue;
-    const speed = mode === "walk" ? WALK_MS : ((D.spd[k] || CLASS_KMH[c] || 35) / 3.6) * 0.8;
-    const ow = mode === "walk" ? 0 : D.ow[k];
-    const la = L(a), lb = L(b), d = D.len[k], cost = d / speed;
-    sA.push(la); sB.push(lb);
-    if (ow >= 0) { eF.push(la); eT.push(lb); eC.push(cost); eL.push(d); }
-    if (ow <= 0) { eF.push(lb); eT.push(la); eC.push(cost); eL.push(d); }
+  for (const D of tiles) {
+    const local = new Int32Array(D.N).fill(-1);
+    const inB = (i) => D.lat[i] >= s && D.lat[i] <= n && D.lon[i] >= w && D.lon[i] <= e;
+    const L = (i) => {
+      if (local[i] < 0) {
+        const key = D.lat[i] + "," + D.lon[i];
+        let g = merged.get(key);
+        if (g === undefined) { g = lat.length; merged.set(key, g); lat.push(D.lat[i] / 1e6); lon.push(D.lon[i] / 1e6); }
+        local[i] = g;
+      }
+      return local[i];
+    };
+    for (let k = 0; k < D.E; k++) {
+      const a = D.a[k], b = D.b[k], c = D.cls[k];
+      if (!inB(a) && !inB(b)) continue;
+      if (mode === "walk" ? (c === 0 || c === 8) : c === 13) continue;
+      const speed = mode === "walk" ? WALK_MS : ((D.spd[k] || CLASS_KMH[c] || 35) / 3.6) * 0.8;
+      const ow = mode === "walk" ? 0 : D.ow[k];
+      const la = L(a), lb = L(b), d = D.len[k], cost = d / speed;
+      sA.push(la); sB.push(lb);
+      if (ow >= 0) { eF.push(la); eT.push(lb); eC.push(cost); eL.push(d); }
+      if (ow <= 0) { eF.push(lb); eT.push(la); eC.push(cost); eL.push(d); }
+    }
   }
   const N = lat.length, m = eF.length;
   const off = new Uint32Array(N + 1);
@@ -785,20 +803,25 @@ function dijkstra(src) {
   }
   return { dist, meters, pred };
 }
-async function analyzeLocal(region) {
+async function analyzeLocal(M) {
   const mode = settings.mode;
-  setStatus(`Loading the ${region.name} road map…`, "busy");
-  const D = await loadRegion(region, (got, total) =>
-    setStatus(`Loading the ${region.name} road map (${(got / 1e6).toFixed(1)}${total ? " of " + (total / 1e6).toFixed(1) : ""} MB, first time only)…`, "busy"));
   let s = 90, w = 180, n = -90, e = -180;
   for (const p of people) { s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lon); e = Math.max(e, p.lon); }
   const kx = Math.cos(((s + n) / 2) * Math.PI / 180);
   const padLat = Math.max((n - s) * 0.15, 0.02), padLon = Math.max((e - w) * 0.15, 0.02 / kx);
+  const box = [s - padLat, w - padLon, n + padLat, e + padLon];
+  const need = M.tiles.filter((t) => boxesOverlap(t.bbox, box));
+  if (!need.length) throw new Error("no map tiles here");
+  const mb = need.reduce((t, x) => t + x.bytes, 0) / 1e6;
+  if (mb > 120) throw new Error("area too large for pre-built tiles");
+  setStatus(`Loading the ${M.name} road map…`, "busy");
+  const D = await loadTiles(need, (got, total) =>
+    setStatus(`Loading ${need.length} road map tile${need.length > 1 ? "s" : ""} (${(got / 1e6).toFixed(1)} of ${(total / 1e6).toFixed(1)} MB)…`, "busy"));
   setStatus("Building the street network…", "busy"); await tick();
-  G = buildLocalGraph(D, [s - padLat, w - padLon, n + padLat, e + padLon], mode);
+  G = buildLocalGraph(D, box, mode);
   if (G.S < 10) throw new Error("no roads in the pre-built map here");
   projectNodes();
-  const R = { kind: "roads", mode, tier: `every street (pre-loaded ${region.name} map)`, src: [], flood: [], snapWarn: [] };
+  const R = { kind: "roads", mode, tier: `every street (pre-loaded ${M.name} map, updated ${M.built})`, src: [], flood: [], snapWarn: [] };
   for (const p of people) {
     const sn = snapNode(p.lat, p.lon);
     R.src.push(sn);
@@ -859,11 +882,12 @@ function chooseMeetingRoads() {
 
 async function analyze() {
   if (busy || people.length < 2) return;
-  const region = regionFor(people);
-  if (region) {
+  let M = null;
+  try { M = await loadManifest(); } catch (e) { /* no pre-built maps yet */ }
+  if (M && people.every((p) => inBox(M.bbox, p.lat, p.lon))) {
     stopAnim(); clearRoutes(); busy = true; renderList();
     let ok = false;
-    try { ok = await analyzeLocal(region); }
+    try { ok = await analyzeLocal(M); }
     catch (e) { console.warn("Pre-built map unavailable, using the routing service instead:", e); result = null; G = null; }
     finally { busy = false; renderList(); }
     if (ok) return;

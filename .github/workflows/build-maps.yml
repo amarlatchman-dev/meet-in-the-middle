@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -46,27 +46,27 @@ jobs:
           done
           if [ "$ok" = 1 ]; then
             # bbox order for osmium is W,S,E,N
-            osmium extract -b -80.25,42.85,-78.65,44.15 ontario.osm.pbf -o gta.osm.pbf
-            osmium tags-filter gta.osm.pbf w/highway -o gta-roads.osm.pbf
+            osmium tags-filter ontario.osm.pbf w/highway -o roads-all.osm.pbf
+            osmium extract -b -83.2,41.6,-74.3,45.7 roads-all.osm.pbf -o roads.osm.pbf
           else
             echo "Geofabrik unreachable; falling back to Overpass tiles"
-            python tools/fetch_overpass.py tiles --bbox 42.85,-80.25,44.15,-78.65
+            python tools/fetch_overpass.py tiles --bbox 41.6,-83.2,45.7,-74.3 --step 0.25
             for f in tiles/*.osm; do osmium sort "$f" -o "${f%.osm}.pbf"; done
-            osmium merge tiles/*.pbf -o gta-roads.osm.pbf
+            osmium merge tiles/*.pbf -o roads.osm.pbf
           fi
-          ls -la gta-roads.osm.pbf
+          ls -la roads.osm.pbf
 
-      - name: Build data/gta.bin
+      - name: Build Southern Ontario road tiles
         run: |
-          mkdir -p data
-          python tools/build_region.py gta-roads.osm.pbf data/gta.bin --bbox 42.85,-80.25,44.15,-78.65
-          ls -la data
+          rm -rf data/tiles data/manifest.json
+          python tools/build_region.py roads.osm.pbf data --bbox 41.6,-83.2,45.7,-74.3 --step 0.5 --name "Southern Ontario"
+          du -sh data; ls data/tiles | wc -l
 
       - name: Commit the map file
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/gta.bin
+          git add -A data
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
-          git commit -m "Update GTA road map from OpenStreetMap"
+          git commit -m "Update Southern Ontario road map from OpenStreetMap"
           git push

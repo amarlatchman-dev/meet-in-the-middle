@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Build a compact road-network file for Meet in the Middle from an OSM extract.
 
-Usage: build_region.py INPUT.osm.pbf OUTPUT.bin --bbox S,W,N,E
+Usage: build_region.py INPUT.osm.pbf OUT_DIR --bbox S,W,N,E [--step 0.5] [--name NAME]
+
+Writes OUT_DIR/manifest.json plus one tile file per --step degree square
+(OUT_DIR/tiles/<row>_<col>.bin). Each segment goes in the tile of its first
+node; nodes shared across tiles are repeated and merged by exact coordinates
+in the browser.
 
 Keeps drivable/walkable public roads, splits ways at intersections, and
 simplifies curves (Douglas-Peucker, ~12 m) so the file stays small.
 
-Binary layout (little endian), all 4-byte arrays first so they stay aligned:
+Tile binary layout (little endian), all 4-byte arrays first so they stay aligned:
   char[4]  magic "MITM"
   uint32   version (1)
   uint32   node count N
@@ -21,6 +26,9 @@ Binary layout (little endian), all 4-byte arrays first so they stay aligned:
   uint8[E] maxspeed km/h (0 = unknown)
 """
 import argparse
+import datetime
+import json
+import os
 import math
 import struct
 import sys
@@ -136,8 +144,10 @@ class Roads(osmium.SimpleHandler):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input")
-    ap.add_argument("output")
+    ap.add_argument("out_dir")
     ap.add_argument("--bbox", required=True, help="S,W,N,E")
+    ap.add_argument("--step", type=float, default=0.5, help="tile size in degrees")
+    ap.add_argument("--name", default="Southern Ontario")
     a = ap.parse_args()
     bbox = [float(x) for x in a.bbox.split(",")]
 
@@ -185,20 +195,57 @@ def main():
                     prev = (cur, la, lo)
                 start = k
 
-    N, E = len(lat), len(A)
-    with open(a.output, "wb") as f:
-        f.write(b"MITM")
-        f.write(struct.pack("<III", 1, N, E))
-        f.write(struct.pack(f"<{N}i", *lat))
-        f.write(struct.pack(f"<{N}i", *lon))
-        f.write(struct.pack(f"<{E}I", *A))
-        f.write(struct.pack(f"<{E}I", *B))
-        f.write(struct.pack(f"<{E}f", *LEN))
-        f.write(struct.pack(f"<{E}B", *CLS))
-        f.write(struct.pack(f"<{E}b", *OW))
-        f.write(struct.pack(f"<{E}B", *SPD))
-    size = 16 + N * 8 + E * 15
-    print(f"{N:,} nodes, {E:,} segments, {size / 1e6:.1f} MB", file=sys.stderr)
+    step = a.step
+    s0, w0 = bbox[0], bbox[1]
+    buckets = {}
+    for k in range(len(A)):
+        r = int((lat[A[k]] / 1e6 - s0) // step)
+        c = int((lon[A[k]] / 1e6 - w0) // step)
+        buckets.setdefault((r, c), []).append(k)
+
+    os.makedirs(os.path.join(a.out_dir, "tiles"), exist_ok=True)
+    manifest = {
+        "version": 1, "name": a.name, "step": step, "bbox": bbox,
+        "built": datetime.date.today().isoformat(), "tiles": [],
+    }
+    total_bytes = 0
+    for (r, c), segs in sorted(buckets.items()):
+        local = {}
+        tlat, tlon = [], []
+
+        def L(i):
+            j = local.get(i)
+            if j is None:
+                j = len(tlat)
+                local[i] = j
+                tlat.append(lat[i])
+                tlon.append(lon[i])
+            return j
+
+        ta = [L(A[k]) for k in segs]
+        tb = [L(B[k]) for k in segs]
+        N, E = len(tlat), len(segs)
+        name = f"{r}_{c}.bin"
+        path = os.path.join(a.out_dir, "tiles", name)
+        with open(path, "wb") as f:
+            f.write(b"MITM")
+            f.write(struct.pack("<III", 1, N, E))
+            f.write(struct.pack(f"<{N}i", *tlat))
+            f.write(struct.pack(f"<{N}i", *tlon))
+            f.write(struct.pack(f"<{E}I", *ta))
+            f.write(struct.pack(f"<{E}I", *tb))
+            f.write(struct.pack(f"<{E}f", *[LEN[k] for k in segs]))
+            f.write(struct.pack(f"<{E}B", *[CLS[k] for k in segs]))
+            f.write(struct.pack(f"<{E}b", *[OW[k] for k in segs]))
+            f.write(struct.pack(f"<{E}B", *[SPD[k] for k in segs]))
+        size = os.path.getsize(path)
+        total_bytes += size
+        tb_box = [round(s0 + r * step, 4), round(w0 + c * step, 4), round(s0 + (r + 1) * step, 4), round(w0 + (c + 1) * step, 4)]
+        manifest["tiles"].append({"file": "tiles/" + name, "bbox": tb_box, "bytes": size})
+    with open(os.path.join(a.out_dir, "manifest.json"), "w") as f:
+        json.dump(manifest, f, separators=(",", ":"))
+    print(f"{len(lat):,} nodes, {len(A):,} segments, {len(buckets)} tiles, {total_bytes / 1e6:.1f} MB total, "
+          f"largest tile {max(t['bytes'] for t in manifest['tiles']) / 1e6:.1f} MB", file=sys.stderr)
 
 
 if __name__ == "__main__":
