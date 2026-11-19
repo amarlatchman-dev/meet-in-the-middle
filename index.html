@@ -459,7 +459,7 @@ function bindSeg(id, key) {
     if (settings[key] === b.dataset.v) return;
     settings[key] = b.dataset.v; paint(); save();
     if (key === "mode") invalidate();
-    else if (result && G) { chooseMeeting(); finishResultAndNearby(); play(true); }
+    else if (result && G && !busy) { const R = result; busy = true; renderList(); computeMeet(R).then(() => { if (result !== R) return; setStatus("", ""); finishResultAndNearby(); play(true); }).catch((e) => setStatus(e.message, "err")).finally(() => { busy = false; renderList(); }); }
     goalHint();
   });
   paint();
@@ -582,192 +582,72 @@ function hav(a1, o1, a2, o2) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-function planQuery(mode) {
-  let s = 90, w = 180, n = -90, e = -180;
-  for (const p of people) { s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lon); e = Math.max(e, p.lon); }
-  const spanKm = hav(s, w, n, e) / 1000;
-  const padLat = Math.max((n - s) * 0.12, 0.015), padLon = Math.max((e - w) * 0.12, 0.015 / Math.cos(((s + n) / 2) * Math.PI / 180));
-  const bbox = [s - padLat, w - padLon, n + padLat, e + padLon];
-  const D = hav(bbox[0], bbox[1], bbox[2], bbox[3]) / 1000;
-  const links = "motorway_link|trunk_link|primary_link|secondary_link|tertiary_link";
-  let classes, tier;
-  if (mode === "drive") {
-    if (D <= 32) { classes = `motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|${links}`; tier = "every street"; }
-    else if (D <= 90) { classes = `motorway|trunk|primary|secondary|tertiary|${links}`; tier = "main roads (people are spread out, so side streets were skipped)"; }
-    else if (D <= 260) { classes = "motorway|trunk|primary|motorway_link|trunk_link|primary_link"; tier = "highways and major roads only (people are far apart)"; }
-    else return { error: `These locations span about ${Math.round(spanKm)} km. That's too much road to download in a browser. Try a group within about 200 km of each other.` };
-  } else {
-    if (D <= 12) { classes = "trunk|primary|secondary|tertiary|unclassified|residential|living_street|pedestrian|footway|path|steps|cycleway|service|track|" + links.replace("motorway_link|", ""); tier = "every street and footpath"; }
-    else if (D <= 32) { classes = "trunk|primary|secondary|tertiary|unclassified|residential|living_street|pedestrian"; tier = "streets only (footpaths skipped to keep the download small)"; }
-    else return { error: `These locations span about ${Math.round(spanKm)} km, which is a long walk. Switch to Car for groups this spread out.` };
-  }
-  const g = Math.min(5, Math.max(1, Math.ceil(D / (classes.includes("residential") ? 7 : 25))));
-  const tiles = [];
-  const dLat = (bbox[2] - bbox[0]) / g, dLon = (bbox[3] - bbox[1]) / g;
-  for (let r = 0; r < g; r++) for (let c = 0; c < g; c++) {
-    const tb = [bbox[0] + r * dLat, bbox[1] + c * dLon, bbox[0] + (r + 1) * dLat, bbox[1] + (c + 1) * dLon];
-    tiles.push(`[out:json][timeout:60];way["highway"~"^(${classes})$"](${tb.map((v) => v.toFixed(5)).join(",")});out body geom qt;`);
-  }
-  return { tiles, bbox, tier, spanKm };
-}
-
-let TIMEOUT_MS = 60000;
+/* Travel times come from the free OSRM routing servers run for OpenStreetMap. */
+const ROUTERS = {
+  drive: ["https://routing.openstreetmap.de/routed-car", "https://router.project-osrm.org"],
+  walk: ["https://routing.openstreetmap.de/routed-foot"],
+};
+const TABLE_MAX = 90; // coordinates per table request
+let TIMEOUT_MS = 30000;
 async function fetchWithTimeout(url, opts, ms) {
   const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
   try { return await fetch(url, { ...opts, signal: ac.signal }); }
-  catch (e) { throw new Error(e.name === "AbortError" ? "the server took too long" : e.message); }
+  catch (e) { throw new Error(e.name === "AbortError" ? "the routing server took too long" : e.message); }
   finally { clearTimeout(t); }
 }
-async function fetchTile(q, k) {
-  let lastErr;
-  for (let attempt = 0; attempt < OVERPASS.length + 1; attempt++) {
-    const url = OVERPASS[(k + attempt) % OVERPASS.length];
-    try {
-      if (attempt >= OVERPASS.length) await new Promise((r) => setTimeout(r, 4000));
-      const r = await fetchWithTimeout(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } }, TIMEOUT_MS);
-      if (!r.ok) throw new Error(`server said ${r.status}`);
-      const j = await r.json();
-      if (j.remark && /error|timed out|out of memory/i.test(j.remark)) throw new Error("server ran out of time");
-      return j.elements || [];
-    } catch (e) { lastErr = e; }
-  }
-  throw lastErr;
-}
-async function fetchRoads(tiles, onStage) {
-  const byId = new Map();
-  let done = 0, next = 0, failed = null;
-  const total = tiles.length;
-  onStage(total > 1 ? `Downloading the road network (0 of ${total} areas)…` : "Downloading the road network from OpenStreetMap…");
-  const worker = async () => {
-    while (next < total && !failed) {
-      const k = next++;
+async function osrm(mode, service, coords, query) {
+  const path = coords.map(([la, lo]) => `${lo.toFixed(6)},${la.toFixed(6)}`).join(";");
+  let last;
+  for (const base of ROUTERS[mode]) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        for (const w of await fetchTile(tiles[k], k)) byId.set(w.id, w);
-        done++;
-        if (total > 1) onStage(`Downloading the road network (${done} of ${total} areas)…`);
-      } catch (e) { failed = e; }
-    }
-  };
-  await Promise.all([worker(), worker(), worker()].slice(0, Math.min(3, total)));
-  if (failed) throw new Error(`Couldn't download road data (${failed.message}). The free map servers may be busy; wait a minute and try again.`);
-  if (!byId.size) throw new Error("No roads found in this area.");
-  return [...byId.values()];
-}
-
-function onewayDir(t) {
-  const o = t.oneway;
-  if (o === "no" || o === "false" || o === "0") return 0;
-  if (o === "-1" || o === "reverse") return -1;
-  if (o === "yes" || o === "true" || o === "1") return 1;
-  if (t.junction === "roundabout" || t.junction === "circular") return 1;
-  if (t.highway === "motorway") return 1;
-  return 0;
-}
-const DEFAULT_KMH = { motorway: 100, motorway_link: 60, trunk: 80, trunk_link: 50, primary: 60, primary_link: 45, secondary: 50, secondary_link: 40, tertiary: 45, tertiary_link: 35, unclassified: 40, residential: 30, living_street: 10 };
-function driveSpeed(t) {
-  let kmh = NaN;
-  if (t.maxspeed) {
-    kmh = parseFloat(t.maxspeed);
-    if (/mph/.test(t.maxspeed)) kmh *= 1.609;
-  }
-  if (!(kmh > 4 && kmh < 200)) kmh = DEFAULT_KMH[t.highway] || 35;
-  return (kmh / 3.6) * 0.8; // real trips run slower than the posted limit
-}
-
-function buildGraph(ways, mode) {
-  const idx = new Map();
-  const lat = [], lon = [];
-  const eF = [], eT = [], eC = [], eL = [];
-  const sA = [], sB = [];
-  for (const w of ways) {
-    if (w.type !== "way" || !w.nodes || !w.geometry) continue;
-    const t = w.tags || {};
-    if (t.area === "yes") continue;
-    if (mode === "drive" && (t.access === "no" || t.access === "private" || t.motor_vehicle === "no" || t.motorcar === "no")) continue;
-    if (mode === "walk" && (t.foot === "no" || t.access === "private" || t.access === "no")) continue;
-    const speed = mode === "walk" ? WALK_MS : driveSpeed(t);
-    const ow = mode === "drive" ? onewayDir(t) : 0;
-    let prev = -1, pLat = 0, pLon = 0;
-    for (let k = 0; k < w.nodes.length; k++) {
-      const g = w.geometry[k];
-      if (!g) { prev = -1; continue; }
-      let i = idx.get(w.nodes[k]);
-      if (i === undefined) { i = lat.length; idx.set(w.nodes[k], i); lat.push(g.lat); lon.push(g.lon); }
-      if (prev >= 0 && prev !== i) {
-        const d = hav(pLat, pLon, g.lat, g.lon), c = d / speed;
-        sA.push(prev); sB.push(i);
-        if (ow >= 0) { eF.push(prev); eT.push(i); eC.push(c); eL.push(d); }
-        if (ow <= 0) { eF.push(i); eT.push(prev); eC.push(c); eL.push(d); }
-      }
-      prev = i; pLat = g.lat; pLon = g.lon;
+        if (attempt) await new Promise((r) => setTimeout(r, 1500));
+        const r = await fetchWithTimeout(`${base}/${service}/v1/driving/${path}?${query}`, {}, TIMEOUT_MS);
+        if (r.status === 429) throw new Error("the routing server is rate limiting");
+        const j = await r.json();
+        if (j.code !== "Ok") throw new Error(j.message || j.code);
+        return j;
+      } catch (e) { last = e; }
     }
   }
-  const n = lat.length, m = eF.length;
-  const off = new Uint32Array(n + 1);
-  for (let k = 0; k < m; k++) off[eF[k] + 1]++;
-  for (let i = 0; i < n; i++) off[i + 1] += off[i];
-  const fill = off.slice(0, n), to = new Int32Array(m), cost = new Float64Array(m), len = new Float64Array(m);
-  for (let k = 0; k < m; k++) { const p = fill[eF[k]]++; to[p] = eT[k]; cost[p] = eC[k]; len[p] = eL[k]; }
-
-  // weakly connected components (union-find), keep the biggest for snapping
-  const par = new Int32Array(n); for (let i = 0; i < n; i++) par[i] = i;
-  const find = (x) => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
-  for (let k = 0; k < sA.length; k++) { const a = find(sA[k]), b = find(sB[k]); if (a !== b) par[a] = b; }
-  const size = new Map(); let best = -1, bestN = 0;
-  for (let i = 0; i < n; i++) { const r = find(i); const c = (size.get(r) || 0) + 1; size.set(r, c); if (c > bestN) { bestN = c; best = r; } }
-  const inMain = new Uint8Array(n); for (let i = 0; i < n; i++) inMain[i] = find(i) === best ? 1 : 0;
-
-  return {
-    n, lat: Float64Array.from(lat), lon: Float64Array.from(lon), off, to, cost, len, inMain,
-    sA: Int32Array.from(sA), sB: Int32Array.from(sB), S: sA.length,
-    px: new Float32Array(n), py: new Float32Array(n),
-  };
+  throw new Error(`Couldn't reach the routing server (${last && last.message}). Check your connection and try again in a minute.`);
 }
-
-function snap(G, lat, lon) {
-  const k = Math.cos(lat * Math.PI / 180);
-  let best = -1, bd = Infinity;
-  for (let i = 0; i < G.n; i++) {
-    if (!G.inMain[i]) continue;
-    const dy = G.lat[i] - lat, dx = (G.lon[i] - lon) * k, d = dx * dx + dy * dy;
-    if (d < bd) { bd = d; best = i; }
-  }
-  return best;
+// travel time/distance from every person to each destination; returns [{t:[..], m:[..], loc:[lat,lon]}]
+async function tableTo(mode, dests, onProgress) {
+  const src = people.map((p) => [p.lat, p.lon]);
+  const per = TABLE_MAX - src.length, chunks = [];
+  for (let i = 0; i < dests.length; i += per) chunks.push(dests.slice(i, i + per));
+  const out = new Array(dests.length);
+  let next = 0, done = 0;
+  const worker = async () => {
+    while (next < chunks.length) {
+      const k = next++, ch = chunks[k];
+      const coords = src.concat(ch);
+      const q = `sources=${src.map((_, i) => i).join(";")}&destinations=${ch.map((_, i) => i + src.length).join(";")}&annotations=duration,distance`;
+      const j = await osrm(mode, "table", coords, q);
+      ch.forEach((_, d) => {
+        out[k * per + d] = {
+          t: src.map((_, i) => (j.durations[i][d] == null ? Infinity : j.durations[i][d])),
+          m: src.map((_, i) => (j.distances && j.distances[i][d] != null ? j.distances[i][d] : NaN)),
+          loc: [j.destinations[d].location[1], j.destinations[d].location[0]],
+          snapOff: j.destinations[d].distance || 0,
+        };
+      });
+      onProgress && onProgress(++done, chunks.length);
+    }
+  };
+  await Promise.all([worker(), worker()].slice(0, chunks.length));
+  return out;
 }
-
-function dijkstra(G, src) {
-  const n = G.n, dist = new Float64Array(n).fill(Infinity), meters = new Float64Array(n), pred = new Int32Array(n).fill(-1);
-  const hk = [], hv = [];
-  const push = (k, v) => {
-    let i = hk.length; hk.push(k); hv.push(v);
-    while (i > 0) { const p = (i - 1) >> 1; if (hk[p] <= k) break; hk[i] = hk[p]; hv[i] = hv[p]; i = p; }
-    hk[i] = k; hv[i] = v;
-  };
-  const pop = () => {
-    const top = hv[0], lk = hk.pop(), lv = hv.pop(), N = hk.length;
-    if (N) {
-      let i = 0;
-      for (;;) {
-        let c = 2 * i + 1; if (c >= N) break;
-        if (c + 1 < N && hk[c + 1] < hk[c]) c++;
-        if (hk[c] >= lk) break;
-        hk[i] = hk[c]; hv[i] = hv[c]; i = c;
-      }
-      hk[i] = lk; hv[i] = lv;
-    }
-    return top;
-  };
-  dist[src] = 0; push(0, src);
-  const done = new Uint8Array(n);
-  while (hk.length) {
-    const d0 = hk[0], u = pop();
-    if (done[u]) continue; done[u] = 1;
-    for (let e = G.off[u], end = G.off[u + 1]; e < end; e++) {
-      const v = G.to[e], nd = d0 + G.cost[e];
-      if (nd < dist[v]) { dist[v] = nd; meters[v] = meters[u] + G.len[e]; pred[v] = u; push(nd, v); }
-    }
-  }
-  return { dist, meters, pred };
+function makeGrid(bbox, cols, rows) {
+  const pts = [], dLat = (bbox[2] - bbox[0]) / rows, dLon = (bbox[3] - bbox[1]) / cols;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) pts.push([bbox[0] + (r + 0.5) * dLat, bbox[1] + (c + 0.5) * dLon]);
+  return { pts, dLat, dLon };
+}
+function score(t, goal) {
+  let mx = 0, sm = 0;
+  for (const v of t) { if (!(v < Infinity)) return null; if (v > mx) mx = v; sm += v; }
+  return goal === "fair" ? mx * 1e6 + sm : sm * 1e6 + mx;
 }
 
 function sortedOrder(keys) {
@@ -779,48 +659,56 @@ function sortedOrder(keys) {
   for (let i = 0; i < order.length; i++) sk[i] = keys[order[i]];
   return { order, keys: sk };
 }
-
 const tick = () => new Promise((r) => setTimeout(r, 16));
 
 async function analyze() {
   if (busy || people.length < 2) return;
   stopAnim(); clearRoutes();
-  const plan = planQuery(settings.mode);
-  if (plan.error) return setStatus(plan.error, "err");
+  const mode = settings.mode;
+  let s = 90, w = 180, n = -90, e = -180;
+  for (const p of people) { s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lon); e = Math.max(e, p.lon); }
+  const spanKm = hav(s, w, n, e) / 1000;
+  if (mode === "walk" && spanKm > 40) return setStatus(`These locations are about ${Math.round(spanKm)} km apart, which is a long walk. Switch to Car for groups this spread out.`, "err");
+  if (spanKm > 800) return setStatus(`These locations are about ${Math.round(spanKm)} km apart. Try a group within a few hundred kilometres of each other.`, "err");
   busy = true; renderList();
   try {
-    const ways = await fetchRoads(plan.tiles, (m) => setStatus(m, "busy"));
-    setStatus(`Building a network from ${ways.length.toLocaleString()} roads…`, "busy"); await tick();
-    G = buildGraph(ways, settings.mode);
+    // square-ish grid covering everyone plus a margin
+    const kx = Math.cos(((s + n) / 2) * Math.PI / 180);
+    const padLat = Math.max((n - s) * 0.18, 0.012), padLon = Math.max((e - w) * 0.18, 0.012 / kx);
+    const bbox = [s - padLat, w - padLon, n + padLat, e + padLon];
+    const hKm = (bbox[2] - bbox[0]) * 111, wKm = (bbox[3] - bbox[1]) * 111 * kx;
+    const CELLS = 26;
+    const cols = wKm >= hKm ? CELLS : Math.max(8, Math.round(CELLS * wKm / hKm));
+    const rows = hKm > wKm ? CELLS : Math.max(8, Math.round(CELLS * hKm / wKm));
+    const grid = makeGrid(bbox, cols, rows);
+    setStatus("Asking the routing server for travel times…", "busy");
+    const cells = await tableTo(mode, grid.pts, (d, t) => setStatus(`Measuring travel times across the area (${d} of ${t})…`, "busy"));
+    setStatus("Finding where everyone's travel times meet…", "busy"); await tick();
+    G = {
+      n: cells.length, S: cells.length,
+      lat: Float64Array.from(grid.pts, (p) => p[0]), lon: Float64Array.from(grid.pts, (p) => p[1]),
+      dLat: grid.dLat, dLon: grid.dLon,
+      px: new Float32Array(cells.length), py: new Float32Array(cells.length),
+      cells,
+    };
     projectNodes();
-    const R = { mode: settings.mode, tier: plan.tier, src: [], flood: [], snapWarn: [] };
-    for (const p of people) {
-      const s = snap(G, p.lat, p.lon);
-      R.src.push(s);
-      const off = hav(p.lat, p.lon, G.lat[s], G.lon[s]);
-      if (off > 1500) R.snapWarn.push(`${p.name} is ${(off / 1000).toFixed(1)} km from the nearest mapped road`);
-    }
+    const R = { mode, tier: "the road network from OpenStreetMap", flood: [], snapWarn: [], cells };
     for (let i = 0; i < people.length; i++) {
-      setStatus(`Flooding the streets from ${people[i].name} (${i + 1} of ${people.length})…`, "busy"); await tick();
-      const d = dijkstra(G, R.src[i]);
-      const keys = new Float64Array(G.S);
-      for (let s = 0; s < G.S; s++) keys[s] = Math.min(d.dist[G.sA[s]], d.dist[G.sB[s]]);
-      R.flood.push({ ...d, ...sortedOrder(keys) });
+      const keys = new Float64Array(cells.length);
+      cells.forEach((c, k) => { keys[k] = c.t[i]; });
+      R.flood.push(sortedOrder(keys));
     }
-    setStatus("Finding where the floods meet…", "busy"); await tick();
-    const allKeys = new Float64Array(G.S), owner = new Uint8Array(G.S);
-    for (let s = 0; s < G.S; s++) {
+    const allKeys = new Float64Array(cells.length), owner = new Uint8Array(cells.length);
+    cells.forEach((c, k) => {
       let bk = Infinity, bo = 0;
-      for (let i = 0; i < R.flood.length; i++) {
-        const f = R.flood[i], k = Math.min(f.dist[G.sA[s]], f.dist[G.sB[s]]);
-        if (k < bk) { bk = k; bo = i; }
-      }
-      allKeys[s] = bk; owner[s] = bo;
-    }
+      c.t.forEach((v, i) => { if (v < bk) { bk = v; bo = i; } });
+      allKeys[k] = bk; owner[k] = bo;
+    });
     R.all = sortedOrder(allKeys); R.owner = owner;
     R.people = people.map((p) => ({ id: p.id, name: p.name, color: p.color, lat: p.lat, lon: p.lon }));
     result = R;
-    if (!chooseMeeting()) throw new Error("There's no road route that connects everyone. Check that every pin is on the same landmass, or try Car mode.");
+    await computeMeet(R);
+    if (result !== R) return;
     setStatus("", "");
     finishResultAndNearby();
     play(false);
@@ -833,37 +721,39 @@ async function analyze() {
   }
 }
 
-function chooseMeeting() {
-  const R = result, F = R.flood;
-  let best = -1, bMax = Infinity, bSum = Infinity;
-  const fair = settings.goal === "fair";
-  outer: for (let v = 0; v < G.n; v++) {
-    let mx = 0, sm = 0;
-    for (let i = 0; i < F.length; i++) {
-      const d = F[i].dist[v];
-      if (d === Infinity) continue outer;
-      if (d > mx) mx = d; sm += d;
-    }
-    if (fair ? (mx < bMax - 1e-9 || (Math.abs(mx - bMax) <= 1e-9 && sm < bSum)) : (sm < bSum - 1e-9 || (Math.abs(sm - bSum) <= 1e-9 && mx < bMax))) { best = v; bMax = mx; bSum = sm; }
-  }
-  if (best < 0) return false;
-  R.goal = settings.goal;
-  R.meet = best;
-  R.dist = F.map((f) => ({ secs: f.dist[best], meters: f.meters[best] }));
-  R.paths = F.map((f) => {
-    const pts = []; let v = best;
-    while (v >= 0) { pts.push([G.lat[v], G.lon[v]]); v = f.pred[v]; }
-    return pts.reverse();
+// pick the best grid cell, refine around it, then fetch real routes
+async function computeMeet(R) {
+  const goal = settings.goal;
+  let best = -1, bs = Infinity;
+  R.cells.forEach((c, k) => { const v = score(c.t, goal); if (v != null && v < bs) { bs = v; best = k; } });
+  if (best < 0) throw new Error("There's no route that connects everyone. Check that every pin is reachable by road, or try Car mode.");
+  setStatus("Fine-tuning the meeting spot…", "busy");
+  const c0 = [G.lat[best], G.lon[best]], fine = [];
+  for (let r = -3; r <= 3; r++) for (let c = -3; c <= 3; c++) fine.push([c0[0] + r * G.dLat / 3.5, c0[1] + c * G.dLon / 3.5]);
+  let cand = R.cells[best];
+  try {
+    const refined = await tableTo(R.mode, fine);
+    for (const f of refined) { const v = score(f.t, goal); if (v != null && v < bs) { bs = v; cand = f; } }
+  } catch (e) { /* keep the coarse answer */ }
+  R.goal = goal;
+  R.meetLL = cand.loc;
+  setStatus("Drawing everyone's route…", "busy");
+  const routes = await Promise.all(people.map((p) =>
+    osrm(R.mode, "route", [[p.lat, p.lon], cand.loc], "overview=full&geometries=geojson").then((j) => j.routes[0]).catch(() => null)));
+  R.dist = routes.map((rt, i) => rt ? { secs: rt.duration, meters: rt.distance } : { secs: cand.t[i], meters: cand.m[i] });
+  R.paths = routes.map((rt, i) => rt ? rt.geometry.coordinates.map(([lo, la]) => [la, lo]) : [[R.people[i].lat, R.people[i].lon], cand.loc]);
+  people.forEach((p, i) => {
+    const off = hav(p.lat, p.lon, R.paths[i][0][0], R.paths[i][0][1]);
+    if (off > 1500) R.snapWarn.push(`${p.name} is ${(off / 1000).toFixed(1)} km from the nearest road`);
   });
   R.place = null;
-  return true;
 }
 
 async function finishResult() {
   const R = result;
   renderResults();
   syncMarkers();
-  const lat = G.lat[R.meet], lon = G.lon[R.meet];
+  const [lat, lon] = R.meetLL;
   const place = await reverseLabel(lat, lon, true);
   if (result !== R) return;
   R.place = place && place.main ? place : { main: `${lat.toFixed(4)}, ${lon.toFixed(4)}`, area: "" };
@@ -888,7 +778,7 @@ function fmtResultShort(id) {
 function renderResults() {
   const R = result, box = $("results");
   if (!R || !R.dist) { box.hidden = true; return; }
-  const lat = G.lat[R.meet], lon = G.lon[R.meet];
+  const [lat, lon] = R.meetLL;
   const ll = `${lat.toFixed(5)},${lon.toFixed(5)}`;
   const travel = R.mode === "walk" ? "walking" : "driving";
   const secs = R.dist.map((d) => d.secs);
@@ -930,7 +820,7 @@ function setStatus(msg, kind) {
   el.innerHTML = (kind === "busy" ? '<span class="spin"></span>' : "") + `<span>${escapeHtml(msg)}</span>`;
 }
 function setHud(h, s, color, count) {
-  $("hud-h").innerHTML = escapeHtml(h) + (count != null ? `<span class="n">· ${count.toLocaleString()} <small>roads</small></span>` : "");
+  $("hud-h").innerHTML = escapeHtml(h) + (count != null ? `<span class="n">· ${count.toLocaleString()} <small>spots</small></span>` : "");
   $("hud-h").style.setProperty("--hc", color || "var(--accent)");
   $("hud-s").textContent = s || "";
 }
@@ -951,44 +841,37 @@ function projectNodes() {
     G.py[i] = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * sc - o.y;
   }
 }
-function lineW() { const z = map.getZoom(); return Math.max(0.55, Math.min(2.4, (z - 9.5) * 0.42)); }
-
-function strokeSegs(c, list, from, to, color, alpha, width) {
-  if (to <= from) return;
-  c.strokeStyle = color; c.globalAlpha = alpha; c.lineWidth = width;
-  const { px, py, sA, sB } = G;
-  let k = from;
-  while (k < to) {
-    const end = Math.min(to, k + 8000);
-    c.beginPath();
-    for (; k < end; k++) { const s = list ? list[k] : k; c.moveTo(px[sA[s]], py[sA[s]]); c.lineTo(px[sB[s]], py[sB[s]]); }
-    c.stroke();
-  }
+function cellSize() {
+  if (!G || G.n < 2) return 6;
+  const z = map.getZoom(), sc = 256 * Math.pow(2, z);
+  const w = (G.dLon / 360) * sc;
+  const midLat = G.lat[Math.floor(G.n / 2)] * Math.PI / 180;
+  const h = (G.dLat * Math.PI / 180) * sc / (2 * Math.PI) / Math.cos(midLat);
+  return { w, h };
 }
-function strokeOwned(c, from, to, alpha, width) {
+function fillCells(c, list, from, to, colorOf, alphaOf) {
   if (to <= from) return;
-  const { px, py, sA, sB } = G, order = result.all.order, owner = result.owner;
-  const paths = result.people.map(() => new Path2D());
-  for (let k = from; k < to; k++) { const s = order[k], p = paths[owner[s]]; p.moveTo(px[sA[s]], py[sA[s]]); p.lineTo(px[sB[s]], py[sB[s]]); }
-  c.globalAlpha = alpha; c.lineWidth = width;
-  paths.forEach((p, i) => { c.strokeStyle = result.people[i].color; c.stroke(p); });
+  const { w, h } = cellSize(), gap = Math.min(2, Math.max(0.5, w * 0.08));
+  for (let k = from; k < to; k++) {
+    const i = list[k];
+    c.fillStyle = colorOf(i); c.globalAlpha = alphaOf(i);
+    c.fillRect(G.px[i] - w / 2 + gap / 2, G.py[i] - h / 2 + gap / 2, w - gap, h - gap);
+  }
 }
 function drawBase(c) {
   c.globalCompositeOperation = "source-over";
   c.clearRect(0, 0, flood._size.x, flood._size.y);
-  if (!G) return;
-  strokeSegs(c, null, 0, G.S, getComputedStyle(document.documentElement).getPropertyValue("--road").trim() || "#1d3b2f", 0.9, lineW() * 0.8);
 }
 function drawRange(from, to) {
   const c = ctx(); if (!c || !G || !result) return;
-  const w = lineW();
   c.globalCompositeOperation = "lighter";
   if (anim.phase === "solo") {
-    const f = result.flood[anim.person], col = result.people[anim.person].color;
-    strokeSegs(c, f.order, from, to, col, 0.85, w);
-  } else if (anim.phase === "all" || anim.phase === "routes" || anim.phase === "done") {
-    const dim = anim.phase === "all" ? 0.85 : 0.42;
-    strokeOwned(c, from, to, dim, w);
+    const i = anim.person, f = result.flood[i], col = result.people[i].color, max = f.keys[f.keys.length - 1] || 1;
+    fillCells(c, f.order, from, to, () => col, (k) => 0.5 - 0.32 * (G.cells[k].t[i] / max));
+  } else if (anim.phase !== "idle") {
+    const dim = anim.phase === "all" ? 0.42 : 0.24, max = result.all.keys[result.all.keys.length - 1] || 1;
+    fillCells(c, result.all.order, from, to, (k) => result.people[result.owner[k]].color,
+      (k) => dim * (1 - 0.5 * Math.min(1, G.cells[k].t[result.owner[k]] / max)));
   }
   c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
 }
@@ -1079,8 +962,8 @@ function setRouteProgress(u) {
   routeLayers.forEach((l) => l.setLatLngs(l._pts.slice(0, Math.max(1, Math.ceil(l._pts.length * u)))));
 }
 function showMeetMarker() {
-  if (!result || !G) return;
-  const ll = [G.lat[result.meet], G.lon[result.meet]];
+  if (!result || !result.meetLL) return;
+  const ll = result.meetLL;
   if (meetMarker) map.removeLayer(meetMarker);
   meetMarker = L.marker(ll, {
     zIndexOffset: 1000, interactive: false,
@@ -1178,7 +1061,7 @@ function clearNearby() { nearby = null; poiLayer.clearLayers(); $("nearby").hidd
 
 async function loadNearby(R) {
   clearNearby();
-  const lat = G.lat[R.meet], lon = G.lon[R.meet];
+  const [lat, lon] = R.meetLL;
   $("nearby").hidden = false;
   $("nb-filters").textContent = ""; $("nb-list").textContent = ""; $("nb-hint").textContent = "";
   $("nb-status").innerHTML = '<span class="spin" style="display:inline-block;vertical-align:-2px;margin-right:8px"></span>Looking for places near the meeting spot…';
