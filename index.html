@@ -1563,6 +1563,23 @@ function isFree(t) {
     || t.shop === "mall" || t.tourism === "viewpoint"
     || (/^(museum|gallery|attraction)$/.test(t.tourism || "") && t.fee === "no");
 }
+// Entertainment types (second row of chips under Activities)
+const sportsOf = (t) => (t.sport || "").toLowerCase().split(";");
+const nameOf = (t) => `${t.name || ""} ${t.brand || ""}`.toLowerCase();
+const ACT_TYPES = [
+  { id: "act:escape", label: "Escape rooms", test: (t) => t.leisure === "escape_game" || sportsOf(t).includes("escape_game") || /escape room/.test(nameOf(t)) },
+  { id: "act:bowling", label: "Bowling", test: (t) => t.leisure === "bowling_alley" || sportsOf(t).some((x) => x === "10pin" || x === "bowling") },
+  { id: "act:billiards", label: "Pool & billiards", test: (t) => sportsOf(t).some((x) => x === "billiards" || x === "snooker") || /billiard|pool hall|snooker/.test(nameOf(t)) },
+  { id: "act:hookah", label: "Hookah lounges", test: (t) => t.amenity === "hookah_lounge" || /hookah|shisha|sheesha|narghile|nargile/.test(nameOf(t)) },
+  { id: "act:family", label: "Arcades & family fun", test: (t) => /^(amusement_arcade|indoor_play|trampoline_park)$/.test(t.leisure || "") || /chuck e\.? ?cheese|dave ?(&|and) ?buster|playdium|sky ?zone|urban air|funland|kidz|monkey ?(land|business)|altitude/.test(nameOf(t)) },
+  { id: "act:karaoke", label: "Karaoke", test: (t) => t.amenity === "karaoke_box" || /karaoke|noraebang/.test(nameOf(t)) },
+  { id: "act:games", label: "Laser tag, paintball & axe throwing", test: (t) => sportsOf(t).some((x) => /^(laser_tag|paintball|axe_throwing)$/.test(x)) || /laser ?tag|paintball|axe throw|bad axe|batl/.test(nameOf(t)) },
+  { id: "act:karting", label: "Mini golf & go-karts", test: (t) => t.leisure === "miniature_golf" || sportsOf(t).includes("karting") || /go.?kart|karting|mini.?golf|putt/.test(nameOf(t)) },
+  { id: "act:active", label: "Climbing, skating & sports", test: (t) => /^(climbing|ice_rink|water_park)$/.test(t.leisure || "") || (t.leisure === "sports_centre" && !sportsOf(t).some((x) => /^(billiards|snooker|laser_tag|paintball|karting|axe_throwing|10pin|bowling)$/.test(x))) },
+  { id: "act:shows", label: "Movies & shows", test: (t) => /^(cinema|theatre|arts_centre)$/.test(t.amenity || "") },
+  { id: "act:nightlife", label: "Nightlife", test: (t) => /^(nightclub|casino)$/.test(t.amenity || "") },
+  { id: "act:culture", label: "Museums & attractions", test: (t) => /^(museum|gallery|zoo|aquarium|theme_park|attraction)$/.test(t.tourism || "") },
+];
 const CATS = [
   { id: "all", label: "All", color: "#e6eef2" },
   { id: "food", label: "All food & drink", color: "#ff8c3a", food: true, group: true, test: (t) => /^(restaurant|fast_food|food_court|cafe|ice_cream|bar|pub|biergarten)$/.test(t.amenity || "") || /^(bakery|pastry|confectionery|chocolate)$/.test(t.shop || "") },
@@ -1571,7 +1588,7 @@ const CATS = [
   { id: "cafe", label: "Cafés", color: "#ffcf3f", food: true, test: (t) => t.amenity === "cafe" },
   { id: "dessert", label: "Dessert & bakeries", color: "#ffb3d9", food: true, test: (t) => t.amenity === "ice_cream" || /^(bakery|pastry|confectionery|chocolate)$/.test(t.shop || "") },
   { id: "bars", label: "Bars & pubs", color: "#d06bff", food: true, test: (t) => /^(bar|pub|biergarten)$/.test(t.amenity || "") },
-  { id: "activity", label: "Activities", color: "#55b8ff", test: (t) => /^(cinema|theatre|arts_centre)$/.test(t.amenity || "") || /^(bowling_alley|escape_game|amusement_arcade|miniature_golf|trampoline_park|sports_centre|ice_rink|water_park|climbing)$/.test(t.leisure || "") || /^(museum|gallery|zoo|aquarium|theme_park|attraction)$/.test(t.tourism || "") },
+  { id: "activity", label: "Activities", color: "#55b8ff", test: (t) => ACT_TYPES.some((a) => a.test(t)) },
   { id: "outdoors", label: "Parks & outdoors", color: "#b8f24a", test: (t) => /^(park|garden|nature_reserve|dog_park|playground|common)$/.test(t.leisure || "") || t.tourism === "viewpoint" },
   { id: "shopping", label: "Shopping", color: "#ff6fd2", test: (t) => /^(mall|department_store)$/.test(t.shop || "") || t.amenity === "marketplace" },
   { id: "free", label: "Free", color: "#4fe3a8", test: isFree },
@@ -1585,6 +1602,8 @@ const DIETS = [
 function cuisines(t) { return (t.cuisine || "").toLowerCase().split(/[;,]/).map((c) => c.trim()).filter(Boolean); }
 function subMatch(p, sub) {
   if (!sub) return true;
+  const act = ACT_TYPES.find((a) => a.id === sub);
+  if (act) return act.test(p.tags);
   const d = DIETS.find((x) => x.id === sub);
   return d ? d.test(p.tags) : cuisines(p.tags).includes(sub);
 }
@@ -1593,9 +1612,10 @@ const poiLayer = L.layerGroup().addTo(map);
 function nearbyQuery(lat, lon, r) {
   const A = `(around:${r},${lat.toFixed(5)},${lon.toFixed(5)})`;
   return `[out:json][timeout:40];(
-nwr${A}["amenity"~"^(restaurant|fast_food|food_court|cafe|ice_cream|bar|pub|biergarten|cinema|theatre|arts_centre|library|marketplace|community_centre)$"]["name"];
+nwr${A}["amenity"~"^(restaurant|fast_food|food_court|cafe|ice_cream|bar|pub|biergarten|cinema|theatre|arts_centre|library|marketplace|community_centre|hookah_lounge|karaoke_box|nightclub|casino)$"]["name"];
+nwr${A}["sport"~"billiards|snooker|laser_tag|paintball|karting|axe_throwing|10pin|bowling"]["name"];
 nwr${A}["shop"~"^(bakery|pastry|confectionery|chocolate|mall|department_store)$"]["name"];
-nwr${A}["leisure"~"^(park|garden|nature_reserve|dog_park|common|bowling_alley|escape_game|amusement_arcade|miniature_golf|trampoline_park|sports_centre|ice_rink|water_park|climbing)$"]["name"];
+nwr${A}["leisure"~"^(park|garden|nature_reserve|dog_park|common|bowling_alley|escape_game|amusement_arcade|miniature_golf|trampoline_park|sports_centre|ice_rink|water_park|climbing|indoor_play)$"]["name"];
 nwr${A}["tourism"~"^(museum|gallery|zoo|aquarium|theme_park|attraction|viewpoint)$"]["name"];
 );out center tags qt 500;`;
 }
@@ -1614,7 +1634,9 @@ async function fetchOverpass(q) {
 }
 function pretty(v) { return v ? (v[0].toUpperCase() + v.slice(1)).replace(/_/g, " ") : ""; }
 function poiKind(t) {
-  const base = pretty(t.amenity || t.shop || t.leisure || t.tourism);
+  const act = ACT_TYPES.find((a) => a.test(t));
+  const raw = pretty(t.amenity || t.shop || t.leisure || t.tourism);
+  const base = act && /^(Sports centre|Restaurant|Bar|Pub|Amusement arcade)$/.test(raw) && act.id !== "act:active" ? `${raw} · ${act.label}` : raw;
   const cuisine = t.cuisine ? t.cuisine.split(";").slice(0, 2).map(pretty).join(", ") : "";
   return cuisine ? `${base} · ${cuisine}` : base;
 }
@@ -1704,26 +1726,30 @@ function renderNearby() {
     b.addEventListener("click", () => { nbFilter = c.id; nbSub = ""; renderNearby(); });
     box.appendChild(b);
   }
-  // second row: cuisine and diet filters for food categories
+  // second row: cuisine/diet chips for food, entertainment types for activities
   const sub = $("nb-sub"); sub.textContent = "";
   const cat = CATS.find((c) => c.id === nbFilter);
   const base = nbFilter === "all" ? list : list.filter((p) => p.cats.includes(nbFilter));
-  if (cat && cat.food) {
+  const addChips = (opts) => {
+    if (opts.length < 2) return;
+    for (const o of opts) {
+      const b = document.createElement("button");
+      b.className = "chip sub"; b.style.setProperty("--k", cat.color);
+      b.setAttribute("aria-pressed", o.id === nbSub);
+      b.innerHTML = `${escapeHtml(o.label)}<span class="ct">${o.n}</span>`;
+      b.addEventListener("click", () => { nbSub = o.id; renderNearby(); });
+      sub.appendChild(b);
+    }
+  };
+  if (cat && cat.id === "activity") {
+    addChips([{ id: "", label: "Any", n: base.length }].concat(ACT_TYPES.map((a) => ({ id: a.id, label: a.label, n: base.filter((p) => a.test(p.tags)).length })).filter((o) => o.n)));
+  } else if (cat && cat.food) {
     const counts = new Map();
     base.forEach((p) => cuisines(p.tags).forEach((c) => counts.set(c, (counts.get(c) || 0) + 1)));
     const opts = [{ id: "", label: "Any", n: base.length }]
       .concat(DIETS.map((d) => ({ id: d.id, label: d.label, n: base.filter((p) => d.test(p.tags)).length })).filter((o) => o.n))
       .concat([...counts].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([c, n]) => ({ id: c, label: pretty(c), n })));
-    if (opts.length > 1) {
-      for (const o of opts) {
-        const b = document.createElement("button");
-        b.className = "chip sub"; b.style.setProperty("--k", cat.color);
-        b.setAttribute("aria-pressed", o.id === nbSub);
-        b.innerHTML = `${escapeHtml(o.label)}<span class="ct">${o.n}</span>`;
-        b.addEventListener("click", () => { nbSub = o.id; renderNearby(); });
-        sub.appendChild(b);
-      }
-    }
+    addChips(opts);
   }
   sub.hidden = !sub.childElementCount;
   $("nb-hint").textContent = nbFilter === "free" ? FREE_HINT : "";

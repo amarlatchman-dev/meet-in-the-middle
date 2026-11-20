@@ -20,21 +20,26 @@ import osmium
 
 WANT = {
     "amenity": {"restaurant", "fast_food", "food_court", "cafe", "ice_cream", "bar", "pub", "biergarten",
-                "cinema", "theatre", "arts_centre", "library", "marketplace", "community_centre"},
+                "cinema", "theatre", "arts_centre", "library", "marketplace", "community_centre",
+                "hookah_lounge", "karaoke_box", "nightclub", "casino"},
     "shop": {"bakery", "pastry", "confectionery", "chocolate", "mall", "department_store"},
     "leisure": {"park", "garden", "nature_reserve", "dog_park", "common", "bowling_alley", "escape_game",
                 "amusement_arcade", "miniature_golf", "trampoline_park", "sports_centre", "ice_rink",
-                "water_park", "climbing"},
+                "water_park", "climbing", "indoor_play"},
     "tourism": {"museum", "gallery", "zoo", "aquarium", "theme_park", "attraction", "viewpoint"},
 }
-KEEP = ["amenity", "shop", "leisure", "tourism", "cuisine", "opening_hours", "fee",
+# entertainment found by sport tag (pool halls, laser tag, go-karts...)
+SPORTS = {"billiards", "snooker", "laser_tag", "paintball", "karting", "axe_throwing", "10pin", "bowling", "escape_game"}
+KEEP = ["amenity", "shop", "leisure", "tourism", "sport", "brand", "cuisine", "opening_hours", "fee",
         "diet:vegetarian", "diet:vegan", "diet:halal", "website"]
 
 
 def wanted(tags):
     if not tags.get("name"):
         return False
-    return any(tags.get(k) in v for k, v in WANT.items())
+    if any(tags.get(k) in v for k, v in WANT.items()):
+        return True
+    return any(x in SPORTS for x in (tags.get("sport") or "").split(";"))
 
 
 def slim(tags):

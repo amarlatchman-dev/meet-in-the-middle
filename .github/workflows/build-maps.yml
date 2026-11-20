@@ -134,9 +134,10 @@ jobs:
         run: |
           osmium tags-filter region.osm.pbf w/highway -o roads.osm.pbf
           osmium tags-filter region.osm.pbf \
-            nwr/amenity=restaurant,fast_food,food_court,cafe,ice_cream,bar,pub,biergarten,cinema,theatre,arts_centre,library,marketplace,community_centre \
+            nwr/amenity=restaurant,fast_food,food_court,cafe,ice_cream,bar,pub,biergarten,cinema,theatre,arts_centre,library,marketplace,community_centre,hookah_lounge,karaoke_box,nightclub,casino \
             nwr/shop=bakery,pastry,confectionery,chocolate,mall,department_store \
-            nwr/leisure=park,garden,nature_reserve,dog_park,common,bowling_alley,escape_game,amusement_arcade,miniature_golf,trampoline_park,sports_centre,ice_rink,water_park,climbing \
+            nwr/leisure=park,garden,nature_reserve,dog_park,common,bowling_alley,escape_game,amusement_arcade,miniature_golf,trampoline_park,sports_centre,ice_rink,water_park,climbing,indoor_play \
+            nwr/sport=billiards,snooker,laser_tag,paintball,karting,axe_throwing,10pin,bowling \
             nwr/tourism=museum,gallery,zoo,aquarium,theme_park,attraction,viewpoint \
             -o pois.osm.pbf
           osmium tags-filter region.osm.pbf \
