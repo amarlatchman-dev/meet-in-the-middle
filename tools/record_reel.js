@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 Amar Latchman. All rights reserved. Proprietary; see LICENSE.
 /*
   Record a vertical (1080x1920) Halfwise reel as an MP4, ready for Instagram Reels,
   Facebook Reels and YouTube Shorts.

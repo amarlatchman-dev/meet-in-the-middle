@@ -19,3 +19,8 @@ When everyone is inside a pre-built region, the app downloads only the road tile
 - **Hosting:** tiles are hosted on Cloudflare R2; see [docs/R2_SETUP.md](docs/R2_SETUP.md). Until `TILE_BASE` is set in `index.html`, the app uses the Southern Ontario tiles committed in `data/`.
 
 Map data © OpenStreetMap contributors (ODbL).
+
+
+## Licence
+
+Copyright © 2026 Amar Latchman. All rights reserved. This code is proprietary and is public only so the site can be hosted. No permission is granted to copy, modify or redistribute it. See [LICENSE](LICENSE).

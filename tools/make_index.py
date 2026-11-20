@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Amar Latchman. All rights reserved. Proprietary; see LICENSE.
 """Collect per-region build outputs into one upload folder with index.json.
 
 Usage: make_index.py ARTIFACTS_DIR UPLOAD_DIR [PREVIOUS_INDEX.json]

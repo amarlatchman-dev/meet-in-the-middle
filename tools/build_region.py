@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Amar Latchman. All rights reserved. Proprietary; see LICENSE.
 """Build a compact road-network file for Meet in the Middle from an OSM extract.
 
 Usage: build_region.py INPUT.osm.pbf OUT_DIR [--bbox S,W,N,E] [--step 0.5] [--name NAME]

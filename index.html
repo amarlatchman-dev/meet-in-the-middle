@@ -1,4 +1,10 @@
 <!doctype html>
+<!--
+  Halfwise (https://halfwise.app)
+  Copyright (c) 2026 Amar Latchman. All rights reserved.
+  Proprietary and confidential. Copying, modifying or redistributing this code,
+  in whole or in part, without written permission is prohibited. See LICENSE.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -177,6 +183,9 @@ td small { display: block; color: var(--muted); font-size: 11px; }
 .site-foot { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; }
 .site-foot a { color: var(--muted); text-decoration: none; }
 .site-foot a:hover { color: var(--text); text-decoration: underline; }
+.site-foot .privacy-note { flex-basis: 100%; margin: 0 0 4px; color: var(--muted); line-height: 1.4; }
+.site-foot .privacy-note a { text-decoration: underline; }
+.site-foot .copy { flex-basis: 100%; color: var(--muted); opacity: .7; }
 #results { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 12px; }
 .meet-name { font: 700 22px/1.1 var(--f-display); margin: 4px 0 2px; text-wrap: balance; }
 .meet-sub { color: var(--muted); font-size: 12.5px; }
@@ -336,7 +345,9 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
       <ul id="nb-list"></ul>
     </section>
     <footer class="site-foot">
+      <p class="privacy-note">🔒 Your people and locations stay in this browser. Halfwise has no accounts and no server that stores them. <a href="privacy.html">Privacy policy</a></p>
       <a href="about.html">How it works</a><a href="faq.html">FAQ</a><a href="privacy.html">Privacy</a><a href="contact.html">Contact</a>
+      <span class="copy">© 2026 Halfwise. All rights reserved.</span>
     </footer>
   </aside>
 

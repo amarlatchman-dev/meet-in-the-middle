@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Amar Latchman. All rights reserved. Proprietary; see LICENSE.
 """Build rapid-transit tiles (subway, LRT, streetcar, commuter rail) for Meet in the Middle.
 
 Usage: build_transit.py INPUT.osm.pbf OUT_DIR [--step 0.5]

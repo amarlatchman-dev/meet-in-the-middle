@@ -1,0 +1,22 @@
+Copyright (c) 2026 Amar Latchman. All rights reserved.
+
+This repository and everything in it, including the source code, design, text,
+graphics, logos, brand assets and data-processing tools of Halfwise
+(https://halfwise.app), is proprietary.
+
+The source is publicly visible so the site can be hosted, but no licence is
+granted. You may not copy, modify, distribute, sublicense, host, sell or create
+derivative works from any part of it, in whole or in part, without prior written
+permission from the copyright holder.
+
+Viewing the code, and using the website at halfwise.app as a visitor, does not
+grant any rights to the code.
+
+"Halfwise" and the Halfwise logo identify this service and may not be used for
+other products or services.
+
+Third-party components keep their own licences: Leaflet (BSD-2-Clause), map data
+(c) OpenStreetMap contributors (ODbL), background imagery (c) Esri and its
+providers, and fonts from Google Fonts under their respective licences.
+
+Permission requests: hello@halfwise.app

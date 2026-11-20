@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Amar Latchman. All rights reserved. Proprietary; see LICENSE.
 """Fallback downloader: fetch road ways for a bbox from Overpass in small tiles.
 
 Usage: fetch_overpass.py OUT_DIR --bbox S,W,N,E [--step 0.15]

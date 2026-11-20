@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Amar Latchman. All rights reserved. Proprietary; see LICENSE.
 """Generate Halfwise's content pages (about, faq, privacy, contact) from one template."""
 import datetime
 
@@ -9,6 +10,12 @@ NAV = [("about.html", "How it works"), ("faq.html", "FAQ"), ("privacy.html", "Pr
 def page(fname, title, desc, body):
     nav = "".join(f'<a href="{h}"{" aria-current=\"page\"" if h == fname else ""}>{t}</a>' for h, t in NAV)
     return f"""<!doctype html>
+<!--
+  Halfwise (https://halfwise.app)
+  Copyright (c) 2026 Amar Latchman. All rights reserved.
+  Proprietary and confidential. Copying, modifying or redistributing this code,
+  in whole or in part, without written permission is prohibited. See LICENSE.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -37,7 +44,7 @@ def page(fname, title, desc, body):
 {body}
 </main>
 <footer class="site">
-  <span>© {datetime.date.today().year} Halfwise</span>
+  <span>© {datetime.date.today().year} Halfwise. All rights reserved.</span>
   {"".join(f'<a href="{h}">{t}</a>' for h, t in NAV)}
   <span>Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</span>
 </footer>

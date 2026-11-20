@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Amar Latchman. All rights reserved. Proprietary; see LICENSE.
 """Build pre-loaded "things to do nearby" tiles for Meet in the Middle.
 
 Usage: build_pois.py INPUT.osm.pbf OUT_DIR [--bbox S,W,N,E] [--step 0.5]
