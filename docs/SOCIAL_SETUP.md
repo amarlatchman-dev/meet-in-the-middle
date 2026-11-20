@@ -86,3 +86,11 @@ Try it with your group: halfwise.app (link in bio)
 #toronto #gta #mississauga #scarborough #torontofood #thingstodotoronto #friends #hangout #meetup
 ```
 Swap the city hashtags for each reel. Keep 5–10 hashtags.
+
+## Automatic daily posting
+
+`.github/workflows/daily-social.yml` records one reel a day from [`social/schedule.json`](../social/schedule.json) and posts it to Instagram and the Facebook Page at about 5:37 pm Toronto time. It works through the list in order and starts over at the end. Edit the list to change what gets posted.
+
+- Meta setup: the **halfwise.app** business portfolio has the app **Halfwise Poster** and the system user **Halfwise poster**, which has Content access to the Page and the Instagram account.
+- The repository secret `META_TOKEN` holds that system user's token, which doesn't expire. If posting stops with an auth error, generate a new one in Business Suite (Settings, then System users) and replace the secret.
+- To test, go to **Actions**, then **Daily social reel**, then **Run workflow**. Tick "Record only" to see the video without posting. Each run keeps the MP4 as a download for 14 days.

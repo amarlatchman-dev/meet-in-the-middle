@@ -1,0 +1,62 @@
+name: Daily social reel
+
+# Records one Halfwise reel a day from social/schedule.json and posts it to
+# Instagram and the Facebook Page. Needs the repository secret META_TOKEN
+# (the "Halfwise poster" system-user token from Meta Business Suite).
+# Optional repository variable PAGE_ID pins the Facebook Page.
+on:
+  schedule:
+    - cron: "37 22 * * *" # 5:37 pm Toronto (EST); 6:37 pm in summer
+  workflow_dispatch:
+    inputs:
+      index:
+        description: "Schedule entry number to post (blank = today's)"
+        required: false
+        default: ""
+      platforms:
+        description: "Where to post"
+        required: false
+        default: "instagram,facebook"
+      dry_run:
+        description: "Record only, don't post"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-social
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install recorder
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y ffmpeg >/dev/null || true
+          pip install requests
+      - name: Record and post
+        env:
+          META_TOKEN: ${{ secrets.META_TOKEN }}
+          PAGE_ID: ${{ vars.PAGE_ID }}
+          POST_INDEX: ${{ github.event.inputs.index }}
+          PLATFORMS: ${{ github.event.inputs.platforms || 'instagram,facebook' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+        run: python3 tools/post_daily.py
+      - name: Keep the reel
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reel
+          path: reel-*.mp4
+          retention-days: 14
+          if-no-files-found: ignore
