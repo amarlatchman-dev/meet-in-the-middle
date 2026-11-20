@@ -47,6 +47,7 @@ def main():
     ap.add_argument("out_dir")
     ap.add_argument("--bbox", required=True)
     ap.add_argument("--step", type=float, default=0.15)
+    ap.add_argument("--all", action="store_true", help="fetch every map object, not just roads (for small countries)")
     a = ap.parse_args()
     s, w, n, e = (float(x) for x in a.bbox.split(","))
     os.makedirs(a.out_dir, exist_ok=True)
@@ -63,8 +64,11 @@ def main():
         out = os.path.join(a.out_dir, f"tile{i:03d}.osm")
         if os.path.exists(out) and os.path.getsize(out) > 0:
             continue
-        q = (f'[out:xml][timeout:240];way["highway"~"^({CLASSES})$"]'
-             f"({ts:.4f},{tw:.4f},{tn:.4f},{te:.4f});(._;>;);out body;")
+        if a.all:
+            q = f"[out:xml][timeout:600][maxsize:1073741824];(nwr({ts:.4f},{tw:.4f},{tn:.4f},{te:.4f}););(._;>;);out body;"
+        else:
+            q = (f'[out:xml][timeout:240];way["highway"~"^({CLASSES})$"]'
+                 f"({ts:.4f},{tw:.4f},{tn:.4f},{te:.4f});(._;>;);out body;")
         body = fetch(q, i)
         with open(out, "wb") as f:
             f.write(body)

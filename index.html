@@ -800,6 +800,10 @@ function loadCoverage() {
           return idx.regions.map((r) => ({ ...r, base: TILE_BASE + r.id + "/", roads: TILE_BASE + r.roads, pois: r.pois ? TILE_BASE + r.pois : null, transit: r.transit ? TILE_BASE + r.transit : null }));
         } catch (e) { console.warn("Tile index unavailable, using repo tiles:", e); }
       }
+      try { // repo copy with several regions (same layout as R2)
+        const idx = await getJSON("data/index.json");
+        return idx.regions.map((r) => ({ ...r, base: "data/" + r.id + "/", roads: "data/" + r.roads, pois: r.pois ? "data/" + r.pois : null, transit: r.transit ? "data/" + r.transit : null }));
+      } catch (e) { /* older single-region layout below */ }
       const m = await getJSON("data/manifest.json");
       manifestCache["data/manifest.json"] = m;
       let transit = null;

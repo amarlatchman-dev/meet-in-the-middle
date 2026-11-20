@@ -38,5 +38,6 @@
   {"id": "oklahoma", "name": "Oklahoma", "path": "north-america/us/oklahoma", "metros": "Oklahoma City", "bbbike": ["OklahomaCity", "Tulsa"]},
   {"id": "utah", "name": "Utah", "path": "north-america/us/utah", "metros": "Salt Lake City", "bbbike": ["SaltLakeCity"]},
   {"id": "louisiana", "name": "Louisiana", "path": "north-america/us/louisiana", "metros": "New Orleans", "bbbike": ["NewOrleans"]},
-  {"id": "alabama", "name": "Alabama", "path": "north-america/us/alabama", "metros": "Birmingham"}
+  {"id": "alabama", "name": "Alabama", "path": "north-america/us/alabama", "metros": "Birmingham"},
+  {"id": "antigua-and-barbuda", "name": "Antigua and Barbuda", "path": "central-america/antigua-and-barbuda", "metros": "St. John's", "overpass_bbox": "16.90,-62.40,17.80,-61.60"}
 ]

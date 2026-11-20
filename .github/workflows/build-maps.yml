@@ -74,6 +74,7 @@ jobs:
         env:
           P: ${{ matrix.region.path }}
           BBBIKE: ${{ join(matrix.region.bbbike, ' ') }}
+          OVERPASS_BBOX: ${{ matrix.region.overpass_bbox }}
         run: |
           # Geofabrik blocks GitHub's servers at times, so try the OpenStreetMap France mirror too.
           # Mirror folder names use underscores where Geofabrik uses hyphens.
@@ -113,6 +114,13 @@ jobs:
               osmium merge s-bb-*.osm.pbf -o region.osm.pbf && ok=1
               echo "::warning::Used BBBike metro extracts for $P ($n of them) instead of the full state"
             fi
+          fi
+          if [ "$ok" != 1 ] && [ -n "$OVERPASS_BBOX" ]; then
+            # Small countries without their own extract: download everything straight from Overpass
+            echo "Downloading $P from Overpass"
+            python tools/fetch_overpass.py ov --bbox "$OVERPASS_BBOX" --step 2 --all
+            for f in ov/*.osm; do osmium sort "$f" -o "${f%.osm}.pbf"; done
+            osmium merge ov/*.pbf -o region.osm.pbf && ok=1
           fi
           [ "$ok" = 1 ] || { echo "::error::No download source worked for $P"; exit 1; }
           ls -la region.osm.pbf
@@ -207,15 +215,23 @@ jobs:
           path: upload
           retention-days: 14
 
-      - name: Update the repo's Ontario copy (only until R2 is set up)
+      - name: Update the repo's copy of selected regions (only until R2 is set up)
         if: env.R2_READY != '1'
+        env:
+          REPO_REGIONS: "ontario antigua-and-barbuda"
         run: |
-          if [ ! -f upload/ontario/manifest.json ]; then echo "No Ontario build this run"; exit 0; fi
-          rm -rf data && mkdir -p data && cp -r upload/ontario/* data/
+          mkdir -p sel
+          for id in $REPO_REGIONS; do [ -f "artifacts/region-$id/manifest.json" ] && cp -r "artifacts/region-$id" sel/; done
+          # keep a region from the previous repo copy if it failed this run
+          for id in $REPO_REGIONS; do
+            if [ ! -d "sel/region-$id" ] && [ -f "data/$id/manifest.json" ]; then cp -r "data/$id" "sel/region-$id"; fi
+          done
+          [ -n "$(ls sel)" ] || { echo "Nothing to copy"; exit 0; }
+          rm -rf data && python3 tools/make_index.py sel data
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A data
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
-          git commit -m "Update Ontario roads, places and transit from OpenStreetMap"
+          git commit -m "Update repo map copy ($REPO_REGIONS) from OpenStreetMap"
           git pull --rebase origin main
           git push
