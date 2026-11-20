@@ -233,11 +233,17 @@ jobs:
             if [ ! -d "sel/region-$id" ] && [ -f "data/$id/manifest.json" ]; then cp -r "data/$id" "sel/region-$id"; fi
           done
           [ -n "$(ls sel)" ] || { echo "Nothing to copy"; exit 0; }
-          rm -rf data && python3 tools/make_index.py sel data
+          python3 tools/make_index.py sel "$RUNNER_TEMP/newdata"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A data
-          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
-          git commit -m "Update repo map copy ($REPO_REGIONS) from OpenStreetMap"
-          git pull --rebase origin main
-          git push
+          # start from the latest main so other commits (or an earlier build's copy) never conflict
+          for attempt in 1 2 3; do
+            git fetch -q origin main && git checkout -q -B publish-data origin/main
+            rm -rf data && cp -r "$RUNNER_TEMP/newdata" data
+            git add -A data
+            if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+            git commit -q -m "Update repo map copy ($REPO_REGIONS) from OpenStreetMap"
+            if git push -q origin HEAD:main; then exit 0; fi
+            echo "Push raced with another commit; retrying"; sleep 5
+          done
+          exit 1
