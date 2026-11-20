@@ -17,8 +17,13 @@ on:
     - cron: "17 6 * * 1"
   push:
     branches: [main]
-    paths:
-      - "tools/**"
+    paths:  # only the map builders, so unrelated pushes (e.g. social posting) don't restart a build
+      - "tools/build_region.py"
+      - "tools/build_pois.py"
+      - "tools/build_transit.py"
+      - "tools/fetch_overpass.py"
+      - "tools/make_index.py"
+      - "tools/regions.json"
       - ".github/workflows/build-maps.yml"
 
 permissions:
