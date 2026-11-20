@@ -21,7 +21,7 @@ import osmium
 WANT = {
     "amenity": {"restaurant", "fast_food", "food_court", "cafe", "ice_cream", "bar", "pub", "biergarten",
                 "cinema", "theatre", "arts_centre", "library", "marketplace", "community_centre",
-                "hookah_lounge", "karaoke_box", "nightclub", "casino"},
+                "hookah_lounge", "karaoke_box", "nightclub", "casino", "parking"},
     "shop": {"bakery", "pastry", "confectionery", "chocolate", "mall", "department_store"},
     "leisure": {"park", "garden", "nature_reserve", "dog_park", "common", "bowling_alley", "escape_game",
                 "amusement_arcade", "miniature_golf", "trampoline_park", "sports_centre", "ice_rink",
@@ -31,10 +31,15 @@ WANT = {
 # entertainment found by sport tag (pool halls, laser tag, go-karts...)
 SPORTS = {"billiards", "snooker", "laser_tag", "paintball", "karting", "axe_throwing", "10pin", "bowling", "escape_game"}
 KEEP = ["amenity", "shop", "leisure", "tourism", "sport", "brand", "cuisine", "opening_hours", "fee",
+        "parking", "capacity", "access", "maxstay", "parking:fee",
         "diet:vegetarian", "diet:vegan", "diet:halal", "website"]
 
 
 def wanted(tags):
+    if tags.get("amenity") == "parking":
+        # public lots and garages (most have no name); skip private ones and tiny lots
+        return tags.get("access") not in ("private", "no", "permit", "employees", "residents") \
+            and tags.get("parking") not in ("street_side", "lane", "on_kerb", "half_on_kerb", "street")
     if not tags.get("name"):
         return False
     if any(tags.get(k) in v for k, v in WANT.items()):

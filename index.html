@@ -1580,6 +1580,14 @@ const ACT_TYPES = [
   { id: "act:nightlife", label: "Nightlife", test: (t) => /^(nightclub|casino)$/.test(t.amenity || "") },
   { id: "act:culture", label: "Museums & attractions", test: (t) => /^(museum|gallery|zoo|aquarium|theme_park|attraction)$/.test(t.tourism || "") },
 ];
+// Parking (second row of chips under Parking)
+const parkFee = (t) => { const f = (t.fee || t["parking:fee"] || "").toLowerCase(); return f === "no" ? "free" : f && f !== "unknown" ? "paid" : "unknown"; };
+const PARK_TYPES = [
+  { id: "park:free", label: "Free", test: (t) => parkFee(t) === "free" },
+  { id: "park:paid", label: "Paid", test: (t) => parkFee(t) === "paid" },
+  { id: "park:unknown", label: "Cost not listed", test: (t) => parkFee(t) === "unknown" },
+  { id: "park:garage", label: "Garages & underground", test: (t) => /^(multi-storey|underground|rooftop)$/.test(t.parking || "") },
+];
 const CATS = [
   { id: "all", label: "All", color: "#e6eef2" },
   { id: "food", label: "All food & drink", color: "#ff8c3a", food: true, group: true, test: (t) => /^(restaurant|fast_food|food_court|cafe|ice_cream|bar|pub|biergarten)$/.test(t.amenity || "") || /^(bakery|pastry|confectionery|chocolate)$/.test(t.shop || "") },
@@ -1592,6 +1600,7 @@ const CATS = [
   { id: "outdoors", label: "Parks & outdoors", color: "#b8f24a", test: (t) => /^(park|garden|nature_reserve|dog_park|playground|common)$/.test(t.leisure || "") || t.tourism === "viewpoint" },
   { id: "shopping", label: "Shopping", color: "#ff6fd2", test: (t) => /^(mall|department_store)$/.test(t.shop || "") || t.amenity === "marketplace" },
   { id: "free", label: "Free", color: "#4fe3a8", test: isFree },
+  { id: "parking", label: "Parking", color: "#8fb3ff", test: (t) => t.amenity === "parking" },
 ];
 let nearby = null, nbFilter = "all", nbSub = "";
 const DIETS = [
@@ -1602,7 +1611,7 @@ const DIETS = [
 function cuisines(t) { return (t.cuisine || "").toLowerCase().split(/[;,]/).map((c) => c.trim()).filter(Boolean); }
 function subMatch(p, sub) {
   if (!sub) return true;
-  const act = ACT_TYPES.find((a) => a.id === sub);
+  const act = ACT_TYPES.find((a) => a.id === sub) || PARK_TYPES.find((a) => a.id === sub);
   if (act) return act.test(p.tags);
   const d = DIETS.find((x) => x.id === sub);
   return d ? d.test(p.tags) : cuisines(p.tags).includes(sub);
@@ -1614,6 +1623,7 @@ function nearbyQuery(lat, lon, r) {
   return `[out:json][timeout:40];(
 nwr${A}["amenity"~"^(restaurant|fast_food|food_court|cafe|ice_cream|bar|pub|biergarten|cinema|theatre|arts_centre|library|marketplace|community_centre|hookah_lounge|karaoke_box|nightclub|casino)$"]["name"];
 nwr${A}["sport"~"billiards|snooker|laser_tag|paintball|karting|axe_throwing|10pin|bowling"]["name"];
+nwr${A}["amenity"="parking"]["access"!~"^(private|no|permit|employees|residents)$"]["parking"!~"^(street_side|lane|on_kerb|half_on_kerb|street)$"];
 nwr${A}["shop"~"^(bakery|pastry|confectionery|chocolate|mall|department_store)$"]["name"];
 nwr${A}["leisure"~"^(park|garden|nature_reserve|dog_park|common|bowling_alley|escape_game|amusement_arcade|miniature_golf|trampoline_park|sports_centre|ice_rink|water_park|climbing|indoor_play)$"]["name"];
 nwr${A}["tourism"~"^(museum|gallery|zoo|aquarium|theme_park|attraction|viewpoint)$"]["name"];
@@ -1633,7 +1643,16 @@ async function fetchOverpass(q) {
   throw last;
 }
 function pretty(v) { return v ? (v[0].toUpperCase() + v.slice(1)).replace(/_/g, " ") : ""; }
+function parkingDesc(t) {
+  const fee = parkFee(t);
+  const bits = [fee === "free" ? "Free" : fee === "paid" ? "Paid" : "Cost not listed"];
+  if (t.capacity && /^\d+$/.test(t.capacity)) bits.push(`${t.capacity} spaces`);
+  if (t.maxstay) bits.push(`Max ${t.maxstay}`);
+  if (t.access === "customers") bits.push("Customers only");
+  return bits.join(" · ");
+}
 function poiKind(t) {
+  if (t.amenity === "parking") return parkingDesc(t);
   const act = ACT_TYPES.find((a) => a.test(t));
   const raw = pretty(t.amenity || t.shop || t.leisure || t.tourism);
   const base = act && /^(Sports centre|Restaurant|Bar|Pub|Amusement arcade)$/.test(raw) && act.id !== "act:active" ? `${raw} · ${act.label}` : raw;
@@ -1659,7 +1678,7 @@ async function preloadedPlaces(lat, lon, radius) {
       if (!poiTileCache[u]) poiTileCache[u] = getJSON(u).catch((e) => { delete poiTileCache[u]; throw e; });
       return poiTileCache[u];
     }));
-    return lists.flat().map(([la, lo, name, tags]) => ({ lat: la, lon: lo, tags: { ...tags, name } }));
+    return lists.flat().map(([la, lo, name, tags]) => ({ lat: la, lon: lo, tags: name ? { ...tags, name } : { ...tags } }));
   } catch (e) { return null; }
 }
 async function loadNearby(R) {
@@ -1697,13 +1716,15 @@ async function loadNearby(R) {
   for (const el of els) {
     const t = el.tags || {};
     const plat = el.lat != null ? el.lat : el.center && el.center.lat, plon = el.lon != null ? el.lon : el.center && el.center.lon;
-    if (plat == null || !t.name) continue;
-    const key = t.name.toLowerCase() + "|" + Math.round(plat * 2000) + "|" + Math.round(plon * 2000);
+    if (plat == null) continue;
+    const name = t.name || (t.amenity === "parking" ? ({ "multi-storey": "Parking garage", underground: "Underground parking", rooftop: "Rooftop parking" }[t.parking] || "Parking lot") : "");
+    if (!name) continue;
+    const key = name.toLowerCase() + "|" + Math.round(plat * 2000) + "|" + Math.round(plon * 2000);
     if (seen.has(key)) continue; seen.add(key);
     const cats = CATS.filter((c) => c.test && c.test(t)).map((c) => c.id);
     if (!cats.length) continue;
     const main = CATS.find((c) => c.id === cats.find((id) => id !== "free" && id !== "food")) || CATS.find((c) => c.id === "free");
-    list.push({ name: t.name, lat: plat, lon: plon, tags: t, cats, color: main.color, free: cats.includes("free"), d: hav(lat, lon, plat, plon) });
+    list.push({ name, lat: plat, lon: plon, tags: t, cats, color: main.color, free: cats.includes("free"), d: hav(lat, lon, plat, plon) });
   }
   list.sort((a, b) => a.d - b.d);
   nearby = { list, radius: used, R };
@@ -1717,7 +1738,7 @@ function renderNearby() {
   const { list } = nearby;
   const box = $("nb-filters"); box.textContent = "";
   for (const c of CATS) {
-    const n = c.id === "all" ? list.length : list.filter((p) => p.cats.includes(c.id)).length;
+    const n = c.id === "all" ? list.filter((p) => !p.cats.includes("parking")).length : list.filter((p) => p.cats.includes(c.id)).length;
     if (c.id !== "all" && c.id !== "free" && !n) continue;
     const b = document.createElement("button");
     b.className = "chip"; b.style.setProperty("--k", c.color);
@@ -1729,7 +1750,7 @@ function renderNearby() {
   // second row: cuisine/diet chips for food, entertainment types for activities
   const sub = $("nb-sub"); sub.textContent = "";
   const cat = CATS.find((c) => c.id === nbFilter);
-  const base = nbFilter === "all" ? list : list.filter((p) => p.cats.includes(nbFilter));
+  const base = nbFilter === "all" ? list.filter((p) => !p.cats.includes("parking")) : list.filter((p) => p.cats.includes(nbFilter));
   const addChips = (opts) => {
     if (opts.length < 2) return;
     for (const o of opts) {
@@ -1741,7 +1762,9 @@ function renderNearby() {
       sub.appendChild(b);
     }
   };
-  if (cat && cat.id === "activity") {
+  if (cat && cat.id === "parking") {
+    addChips([{ id: "", label: "Any", n: base.length }].concat(PARK_TYPES.map((a) => ({ id: a.id, label: a.label, n: base.filter((p) => a.test(p.tags)).length })).filter((o) => o.n)));
+  } else if (cat && cat.id === "activity") {
     addChips([{ id: "", label: "Any", n: base.length }].concat(ACT_TYPES.map((a) => ({ id: a.id, label: a.label, n: base.filter((p) => a.test(p.tags)).length })).filter((o) => o.n)));
   } else if (cat && cat.food) {
     const counts = new Map();
