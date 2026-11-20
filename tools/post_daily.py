@@ -34,7 +34,7 @@ def pick_entry():
         i = int(os.environ["POST_INDEX"]) % len(posts)
     else:
         start = dt.date.fromisoformat(sched["start_date"])
-        i = (dt.date.today() - start).days % len(posts)
+        i = max(0, (dt.date.today() - start).days) % len(posts)
     e = posts[i]
     n = len(e["people"].split("|"))
     caption = (
