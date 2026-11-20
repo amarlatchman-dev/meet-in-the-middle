@@ -110,8 +110,17 @@ def post_facebook(page, video, caption):
 
 def main():
     i, e, caption = pick_entry()
-    video = ROOT / f"reel-{i}.mp4"
-    record(e, video)
+    for attempt in range(4):  # if a city fails to record, fall back to the next entry
+        video = ROOT / f"reel-{i}.mp4"
+        try:
+            record(e, video)
+            break
+        except subprocess.CalledProcessError:
+            print(f"::warning::Recording entry #{i} failed; trying the next one")
+            os.environ["POST_INDEX"] = str(i + 1)
+            i, e, caption = pick_entry()
+    else:
+        sys.exit("Recording failed for 4 entries in a row")
     if os.environ.get("DRY_RUN") == "1":
         print("Dry run: recorded, not posting.\n" + caption)
         return
