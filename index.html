@@ -232,6 +232,27 @@ tr.longest td.num:first-of-type { color: var(--accent); }
 .flood-canvas { pointer-events: none; }
 .picking #map, .picking .leaflet-container { cursor: crosshair !important; }
 
+/* Reel mode (?reel=1): full-screen vertical map for recording social videos */
+.reel-brand, .endcard { display: none; }
+body.reel #app { grid-template-columns: 1fr; grid-template-rows: 1fr; height: 100%; }
+body.reel #panel, body.reel #replay, body.reel .leaflet-control-container { display: none !important; }
+body.reel #mapwrap { order: 0; height: 100%; }
+body.reel #hud { top: 7%; }
+body.reel #hud .h { font-size: 64px; line-height: 1.05; text-wrap: balance; }
+body.reel #hud .s { font-size: 30px; margin-top: 10px; }
+body.reel .leaflet-tooltip.tag { font-size: 20px; padding: 4px 10px; }
+body.reel .leaflet-tooltip.meet-tag { font-size: 26px; padding: 6px 14px; }
+body.reel .pin-avatar { transform: scale(1.5); }
+body.reel .reel-brand { display: flex; position: absolute; z-index: 600; left: 0; right: 0; bottom: 6%; justify-content: center; align-items: center; gap: 14px; font: 700 34px var(--f-display); color: var(--text); text-shadow: 0 2px 12px #000; pointer-events: none; }
+body.reel .reel-brand img { width: 52px; height: 52px; }
+body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 700; inset: 0; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: rgba(5,8,11,.88); animation: ecIn .6s ease both; }
+.endcard img { width: 180px; height: 180px; }
+.endcard .ec-name { font: 700 96px var(--f-display); color: var(--text); }
+.endcard .ec-name b { color: var(--accent); }
+.endcard .ec-line { font: 600 40px var(--f-body); color: var(--muted); }
+.endcard .ec-url { margin-top: 24px; font: 700 48px var(--f-display); color: var(--ink); background: var(--accent); padding: 14px 34px; border-radius: 18px; }
+@keyframes ecIn { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+
 @media (max-width: 760px) {
   #app { grid-template-columns: 1fr; grid-template-rows: 58vh auto; height: auto; min-height: 100%; }
   #mapwrap { order: -1; height: 58vh; }
@@ -274,7 +295,7 @@ tr.longest td.num:first-of-type { color: var(--accent); }
         <button class="ghost" id="invite">Invite friends to add their location</button>
       </div>
       <div class="join-banner" id="join" hidden></div>
-      <div class="example-chip" id="example" hidden>Example group in Toronto. Adding someone replaces it, or <button id="clear">clear it now</button>.</div>
+      <div class="example-chip" id="example" hidden>Example group across the GTA. Adding someone replaces it, or <button id="clear">clear it now</button>.</div>
     </section>
 
     <section>
@@ -323,6 +344,13 @@ tr.longest td.num:first-of-type { color: var(--accent); }
     <div id="map"></div>
     <div id="hud"><div class="h" id="hud-h"></div><div class="s" id="hud-s"></div></div>
     <button id="replay" hidden>Replay</button>
+    <div class="reel-brand" aria-hidden="true"><img src="icon.svg" alt=""><span>halfwise.app</span></div>
+    <div class="endcard" id="endcard" hidden>
+      <img src="icon.svg" alt="">
+      <div class="ec-name">Half<b>wise</b></div>
+      <div class="ec-line">Find the fair place to meet</div>
+      <div class="ec-url">halfwise.app</div>
+    </div>
   </main>
 </div>
 
@@ -346,10 +374,10 @@ const MODE_INFO = {
   walk: { label: "walking", gmaps: "walking" },
 };
 const EXAMPLE = [
-  { name: "Priya", label: "York University", lat: 43.7735, lon: -79.5019 },
-  { name: "Noah", label: "Don Mills", lat: 43.7347, lon: -79.3443 },
-  { name: "Ava", label: "Rosedale", lat: 43.6790, lon: -79.3800 },
-  { name: "Ryan", label: "High Park", lat: 43.6465, lon: -79.4637 },
+  { name: "Maya", label: "Mississauga", lat: 43.5933, lon: -79.6441 },
+  { name: "Jordan", label: "Scarborough", lat: 43.7757, lon: -79.2578 },
+  { name: "Leah", label: "Vaughan", lat: 43.8255, lon: -79.5385 },
+  { name: "Omar", label: "Liberty Village", lat: 43.6383, lon: -79.4201 },
 ];
 
 /* ---------------- state ---------------- */
@@ -420,7 +448,7 @@ function syncMarkers() {
     m.setLatLng([p.lat, p.lon]);
     m.setIcon(personIcon(p));
     m.unbindTooltip();
-    const tag = result && result.dist ? `${p.name} · ${fmtResultShort(p.id)}` : `${p.name} · ${p.label}`;
+    const tag = result && result.dist ? `${p.name} · ${fmtResultShort(p.id)}` : REEL ? p.name : `${p.name} · ${p.label}`;
     m.bindTooltip(escapeHtml(tag), { permanent: true, direction: "top", offset: [0, -16], className: "tag" });
     const el = m.getTooltip().getElement();
     if (el) el.style.setProperty("--c", p.color);
@@ -990,7 +1018,11 @@ async function analyzeLocal(regions) {
   for (const p of people) { s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lon); e = Math.max(e, p.lon); }
   const kx = Math.cos(((s + n) / 2) * Math.PI / 180);
   const padLat = Math.max((n - s) * 0.15, 0.02), padLon = Math.max((e - w) * 0.15, 0.02 / kx);
-  const box = [s - padLat, w - padLon, n + padLat, e + padLon];
+  let box = [s - padLat, w - padLon, n + padLat, e + padLon];
+  if (REEL) { // fill the whole vertical frame with streets
+    const b = map.getBounds();
+    box = [Math.min(box[0], b.getSouth()), Math.min(box[1], b.getWest()), Math.max(box[2], b.getNorth()), Math.max(box[3], b.getEast())];
+  }
   const use = regions.filter((r) => boxesOverlap(r.bbox, box));
   const manifests = await Promise.all(use.map((r) => loadManifest(r.roads)));
   const need = [];
@@ -1199,14 +1231,14 @@ async function finishResult() {
   const [lat, lon] = R.meetLL;
   const place = await reverseLabel(lat, lon, true);
   if (result !== R) return;
-  R.place = place && place.main ? place : { main: `${lat.toFixed(4)}, ${lon.toFixed(4)}`, area: "" };
+  R.place = REEL && QS.get("place") ? { main: QS.get("place"), area: "" } : place && place.main ? place : { main: `${lat.toFixed(4)}, ${lon.toFixed(4)}`, area: "" };
   renderResults();
   if (anim.phase === "done") showMeetMarker();
 }
 async function finishResultAndNearby() {
   const R = result;
   const p = finishResult();
-  loadNearby(R);
+  if (!REEL) loadNearby(R);
   await p;
 }
 
@@ -1409,6 +1441,7 @@ function play(skipSolo) {
       anim.running = false; $("replay").hidden = false;
       const nm = R.place ? R.place.main : "the middle";
       setHud(`Meet near ${nm}`, hudLine, "#ffffff");
+      if (REEL) setTimeout(() => { $("endcard").hidden = false; document.body.dataset.reelDone = "1"; }, 3000);
     }
   };
   const frame = (now) => {
@@ -1429,7 +1462,7 @@ function play(skipSolo) {
       setHud("All at once", "Floods cross", "#ffffff", target);
     } else if (ph.type === "routes") {
       setRouteProgress(easeOut(u));
-      setHud("Following each route in", "", "#ffffff");
+      setHud("Everyone heads to the middle", "", "#ffffff");
     }
     anim.raf = requestAnimationFrame(frame);
   };
@@ -1837,6 +1870,13 @@ function loadFromHash() {
   } catch (e) { console.warn("Couldn't read the shared link", e); return false; }
 }
 
+/* ---------------- reel mode ---------------- */
+// ?reel=1 shows a clean vertical view for recording social videos. Combine with an invite
+// link (#g=...) to choose the group; &place=Name overrides the meeting spot's name.
+const QS = new URLSearchParams(location.search);
+const REEL = QS.has("reel");
+if (REEL) document.body.classList.add("reel");
+
 /* ---------------- boot ---------------- */
 const fromLink = (load(), loadFromHash());
 if (!fromLink && !people.length) {
@@ -1846,7 +1886,14 @@ if (!fromLink && !people.length) {
 flood.addTo(map);
 bindSeg("mode", "mode"); bindSeg("goal", "goal"); goalHint(); modeHint(); syncWhen();
 refresh();
-fitToPeople();
+if (!REEL) fitToPeople(); // reel mode frames the group itself (an animated fit would override it)
+if (REEL) {
+  map.invalidateSize();
+  map.options.zoomSnap = 0.1; // fine zoom so the group fills the frame
+  if (people.length > 1) map.fitBounds(L.latLngBounds(people.map((p) => [p.lat, p.lon])), { paddingTopLeft: [70, 420], paddingBottomRight: [70, 360], animate: false });
+  setHud(`Where should ${people.length} friends meet?`, QS.get("city") || "");
+  setTimeout(() => analyze(), 2200);
+}
 </script>
 </body>
 </html>
