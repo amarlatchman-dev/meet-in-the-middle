@@ -217,6 +217,14 @@ tr.longest td.num:first-of-type { color: var(--accent); }
   background: rgba(12,18,23,.88); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-size: 13px;
 }
 #replay:hover { border-color: var(--accent); }
+#skip {
+  position: absolute; z-index: 500; right: max(14px, env(safe-area-inset-right, 0px)); bottom: 28px;
+  background: var(--accent); color: #1a1400; border: 0; border-radius: 999px; padding: 9px 16px; font: 700 13.5px var(--f-display);
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+body.reel #skip { display: none !important; }
+.anim-toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin-top: -8px; cursor: pointer; }
+.anim-toggle input { accent-color: var(--accent); width: 15px; height: 15px; }
 
 /* Leaflet theming */
 .leaflet-container { background: var(--ink); font-family: var(--f-body); }
@@ -333,6 +341,7 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
     </section>
 
     <button id="go">Find the meeting spot</button>
+    <label class="anim-toggle"><input type="checkbox" id="anim-on" checked> Play the flood animation</label>
     <div id="status" hidden></div>
     <section id="results" hidden></section>
     <section id="nearby" hidden>
@@ -355,6 +364,7 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
     <div id="map"></div>
     <div id="hud"><div class="h" id="hud-h"></div><div class="s" id="hud-s"></div></div>
     <button id="replay" hidden>Replay</button>
+    <button id="skip" hidden>Skip animation ▸</button>
     <div class="reel-brand" aria-hidden="true"><img src="icon.svg" alt=""><span>halfwise.app</span></div>
     <div class="endcard" id="endcard" hidden>
       <img src="icon.svg" alt="">
@@ -393,7 +403,7 @@ const EXAMPLE = [
 
 /* ---------------- state ---------------- */
 let people = [];
-let settings = { mode: "drive", goal: "fair", when: "" };
+let settings = { mode: "drive", goal: "fair", when: "", anim: true };
 let isExample = false;
 let uid = 1;
 let G = null;          // road graph
@@ -1418,7 +1428,7 @@ function redrawFull() {
 let routeLayers = [], meetMarker = null;
 const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function stopAnim() { cancelAnimationFrame(anim.raf); anim.running = false; anim.phase = "idle"; anim.drawn = 0; $("replay").hidden = true; }
+function stopAnim() { cancelAnimationFrame(anim.raf); anim.running = false; anim.phase = "idle"; anim.drawn = 0; $("replay").hidden = true; $("skip").hidden = true; }
 let altMarkers = [];
 function clearRoutes() {
   routeLayers.forEach((l) => map.removeLayer(l)); routeLayers = [];
@@ -1428,21 +1438,23 @@ function clearRoutes() {
 function upperBound(arr, x) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m] <= x) lo = m + 1; else hi = m; } return lo; }
 const easeOut = (u) => 1 - Math.pow(1 - u, 1.6);
 
-function play(skipSolo) {
+function play(skipSolo, instant) {
   stopAnim(); clearRoutes();
+  instant = instant || (!REEL && settings.anim === false);
   const R = result, N = R.people.length;
   const hudLine = (GOALS[R.goal] || GOALS.fair).hud;
   // flood until a little past the meeting point so the overlap is visible
   const limitAll = Math.min(R.all.keys[R.all.keys.length - 1] || 0, Math.max(...R.dist.map((d) => d.secs)) * 1.35);
   const phases = [];
-  if (!skipSolo && !reduceMotion) {
+  if (!skipSolo && !reduceMotion && !instant) {
     const per = Math.max(1.1, Math.min(2.4, 9 / N));
     for (let i = 0; i < N; i++) phases.push({ type: "solo", person: i, dur: per });
   }
-  if (!reduceMotion) phases.push({ type: "all", dur: 3.6 }, { type: "routes", dur: 1.6 });
+  if (!reduceMotion && !instant) phases.push({ type: "all", dur: 3.6 }, { type: "routes", dur: 1.6 });
   phases.push({ type: "done", dur: 0 });
   let pi = -1, t0 = 0;
   anim.running = true;
+  $("skip").hidden = phases.length < 2;
   $("replay").hidden = true;
 
   const enter = (ph) => {
@@ -1453,7 +1465,7 @@ function play(skipSolo) {
     if (ph.type === "done") {
       anim.drawn = upperBound(R.all.keys, limitAll); redrawFull();
       if (!routeLayers.length) startRoutes(); setRouteProgress(1); showMeetMarker();
-      anim.running = false; $("replay").hidden = false;
+      anim.running = false; $("replay").hidden = false; $("skip").hidden = true;
       const nm = R.place ? R.place.main : "the middle";
       setHud(`Meet near ${nm}`, hudLine, "#ffffff");
       if (REEL) setTimeout(() => { $("endcard").hidden = false; document.body.dataset.reelDone = "1"; }, 3000);
@@ -1745,6 +1757,10 @@ function renderNearby() {
 }
 
 $("replay").addEventListener("click", () => { if (result) play(false); });
+function skipAnimation() { if (result && anim.running) play(true, true); }
+$("skip").addEventListener("click", skipAnimation);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && anim.running && !REEL) skipAnimation(); });
+$("anim-on").addEventListener("change", () => { settings.anim = $("anim-on").checked; save(); if (!settings.anim) skipAnimation(); });
 $("go").addEventListener("click", analyze);
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
@@ -1900,6 +1916,7 @@ if (!fromLink && !people.length) {
 }
 flood.addTo(map);
 bindSeg("mode", "mode"); bindSeg("goal", "goal"); goalHint(); modeHint(); syncWhen();
+$("anim-on").checked = settings.anim !== false;
 refresh();
 if (!REEL) fitToPeople(); // reel mode frames the group itself (an animated fit would override it)
 if (REEL) {
