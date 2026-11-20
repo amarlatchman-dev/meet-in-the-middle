@@ -48,6 +48,8 @@ def page(fname, title, desc, body):
   {"".join(f'<a href="{h}">{t}</a>' for h, t in NAV)}
   <span>Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</span>
 </footer>
+<script>/* GoatCounter: cookie-free visit counts. Skipped for reel recordings and automated browsers. */
+(function(){{var q=location.search;if(/[?&]reel=1/.test(q)||navigator.webdriver)return;var s=document.createElement("script");s.async=true;s.src="//gc.zgo.at/count.js";s.dataset.goatcounter="https://halfwise.goatcounter.com/count";document.head.appendChild(s);}})();</script>
 <!-- Cloudflare Web Analytics --><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{{"token": "d30d9be2bf774681a7b2f68b4e6656c0"}}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
@@ -129,7 +131,7 @@ PRIVACY = f"""<h1>Privacy policy</h1>
 
 <h2>Ads and analytics</h2>
 <p>Halfwise may show ads from Google AdSense. Google and its partners may use cookies or similar technology to show ads based on your visits to this and other sites. You can manage personalised ads at <a href="https://adssettings.google.com">Google Ad Settings</a> and learn more at <a href="https://policies.google.com/technologies/ads">How Google uses information from sites that use its services</a>. Visitors in regions that require it are asked for consent first.</p>
-<p>Halfwise uses Cloudflare Web Analytics to count visits and page load speed. It doesn't use cookies, doesn't store your locations, and doesn't track you across sites.</p>
+<p>Halfwise uses two cookie-free analytics tools: Cloudflare Web Analytics, for visit counts and page speed, and GoatCounter, for visit counts and which features get used (for example, how often someone taps Find the spot or Invite friends, the travel mode chosen and the number of people in a group). Neither one uses cookies, tracks you across sites, or receives your names, addresses or locations. Like any website, they receive your browser's request, including your IP address, which GoatCounter doesn't store.</p>
 
 <h2>Children</h2>
 <p>Halfwise isn't directed at children under 13 and doesn't knowingly collect their information.</p>

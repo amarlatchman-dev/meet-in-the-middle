@@ -554,7 +554,13 @@ function renderList() {
 }
 function refresh() { renderList(); syncMarkers(); save(); }
 
+// Usage events for GoatCounter (no personal data: never names or locations)
+function track(name, title) {
+  try { if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path: name, title: title || name, event: true }); } catch (e) {}
+}
+let trackedAdd = false;
 function addPerson(lat, lon, label) {
+  if (!trackedAdd) { trackedAdd = true; track("add-person", "Added a person"); }
   if (people.length >= MAX_PEOPLE) return null;
   if (isExample) { people = []; isExample = false; }
   const p = { id: uid++, name: `Person ${people.length + 1}`, label: label || "Dropped pin", lat, lon, color: freeColor() };
@@ -1325,6 +1331,7 @@ function renderResults() {
     Everyone arrives at ${fmtClock(meetAt)}. Times are estimates for ${info.label} along ${escapeHtml(R.tier)}${R.mode === "drive" ? ", without live traffic" : ""}.${R.mode === "transit" ? " Transit uses subway, LRT, streetcar and rail lines with average waits; buses and timetables aren't included yet." : ""}${R.snapWarn.length ? " " + escapeHtml(R.snapWarn.join("; ")) + "." : ""}</p>`;
   box.hidden = false;
   $("copy").addEventListener("click", async (e) => {
+    track("copy-spot", "Copied meeting spot");
     try { await navigator.clipboard.writeText(ll); e.target.textContent = "Copied"; }
     catch (err) { e.target.textContent = ll; }
   });
@@ -1535,6 +1542,7 @@ function showMeetMarker() {
 /* ---------------- my location ---------------- */
 let locating = false;
 $("locate").addEventListener("click", () => {
+  track("use-my-location");
   if (!navigator.geolocation) return setStatus("This browser can't share your location. Search your address instead.", "err");
   const b = $("locate");
   locating = true; b.disabled = true; b.textContent = "Finding you…";
@@ -1797,7 +1805,7 @@ function renderNearby() {
     const gq = encodeURIComponent(`${p.name} ${p.lat.toFixed(5)},${p.lon.toFixed(5)}`);
     li.innerHTML = `<span class="k"></span>
       <div class="nm"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(poiKind(p.tags))}${p.free ? ' · <span class="free-tag">Free</span>' : ""}</small>${hours}</div>
-      <div class="d"><span>${fmtKm(p.d)}</span><a href="https://www.google.com/maps/search/?api=1&query=${gq}" target="_blank" rel="noopener">Map</a></div>`;
+      <div class="d"><span>${fmtKm(p.d)}</span><a href="https://www.google.com/maps/search/?api=1&query=${gq}" target="_blank" rel="noopener" onclick="track('nearby-open-map','Opened a nearby place in Maps')">Map</a></div>`;
     const focus = () => { map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), 16), { duration: 0.8 }); m.openTooltip(); };
     li.addEventListener("click", (e) => { if (!e.target.closest("a")) focus(); });
     li.addEventListener("keydown", (e) => { if (e.key === "Enter") focus(); });
@@ -1810,7 +1818,7 @@ function skipAnimation() { if (result && anim.running) play(true, true); }
 $("skip").addEventListener("click", skipAnimation);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && anim.running && !REEL) skipAnimation(); });
 $("anim-on").addEventListener("change", () => { settings.anim = $("anim-on").checked; save(); if (!settings.anim) skipAnimation(); });
-$("go").addEventListener("click", analyze);
+$("go").addEventListener("click", () => { track(`find-spot-${settings.mode || "drive"}`, `Find the spot (${people.length} people)`); track(`group-size-${people.length}`); analyze(); });
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
@@ -1918,6 +1926,7 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
 }
 $("invite").addEventListener("click", async () => {
+  track("invite", "Invite friends");
   const url = groupLink();
   const text = people.length
     ? `Where should we meet? Open this, add where you're coming from, then send the link back to the group.`
@@ -1976,6 +1985,8 @@ if (REEL) {
   setTimeout(() => analyze(), 2200);
 }
 </script>
+<script>/* GoatCounter: cookie-free visit counts. Skipped for reel recordings and automated browsers. */
+(function(){var q=location.search;if(/[?&]reel=1/.test(q)||navigator.webdriver)return;var s=document.createElement("script");s.async=true;s.src="//gc.zgo.at/count.js";s.dataset.goatcounter="https://halfwise.goatcounter.com/count";document.head.appendChild(s);})();</script>
 <!-- Cloudflare Web Analytics --><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "d30d9be2bf774681a7b2f68b4e6656c0"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
