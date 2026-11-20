@@ -48,7 +48,7 @@ def main():
     ap.add_argument("out_dir")
     ap.add_argument("--bbox", required=True)
     ap.add_argument("--step", type=float, default=0.15)
-    ap.add_argument("--all", action="store_true", help="fetch every map object, not just roads (for small countries)")
+    ap.add_argument("--all", action="store_true", help="fetch roads, places, parking and transit, not just roads (for small countries)")
     a = ap.parse_args()
     s, w, n, e = (float(x) for x in a.bbox.split(","))
     os.makedirs(a.out_dir, exist_ok=True)
@@ -66,7 +66,11 @@ def main():
         if os.path.exists(out) and os.path.getsize(out) > 0:
             continue
         if a.all:
-            q = f"[out:xml][timeout:600][maxsize:1073741824];(nwr({ts:.4f},{tw:.4f},{tn:.4f},{te:.4f}););(._;>;);out body;"
+            # everything the app uses (roads, places, parking, transit), not every building
+            b = f"({ts:.4f},{tw:.4f},{tn:.4f},{te:.4f})"
+            q = (f'[out:xml][timeout:300];(way["highway"]{b};nwr["amenity"]{b};nwr["leisure"]{b};nwr["tourism"]{b};'
+                 f'nwr["shop"]{b};nwr["sport"]{b};way["railway"]{b};node["railway"]{b};node["public_transport"]{b};);'
+                 f"(._;>;);out body;")
         else:
             q = (f'[out:xml][timeout:240];way["highway"~"^({CLASSES})$"]'
                  f"({ts:.4f},{tw:.4f},{tn:.4f},{te:.4f});(._;>;);out body;")

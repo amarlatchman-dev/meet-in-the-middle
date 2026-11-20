@@ -123,7 +123,7 @@ jobs:
           if [ "$ok" != 1 ] && [ -n "$OVERPASS_BBOX" ]; then
             # Small countries without their own extract: download everything straight from Overpass
             echo "Downloading $P from Overpass"
-            python tools/fetch_overpass.py ov --bbox "$OVERPASS_BBOX" --step 2 --all
+            python tools/fetch_overpass.py ov --bbox "$OVERPASS_BBOX" --step 0.3 --all
             for f in ov/*.osm; do osmium sort "$f" -o "${f%.osm}.pbf"; done
             osmium merge ov/*.pbf -o region.osm.pbf && ok=1
           fi
