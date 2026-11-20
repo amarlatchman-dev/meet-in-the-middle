@@ -1,6 +1,7 @@
 {
   "_about": "Daily reels for Instagram + Facebook. The workflow posts one entry per day, cycling through the list in order (day count since start_date). Add, remove or reorder entries freely. Optional per-entry keys: mode (drive|transit|bike|walk), goal (fair|balanced|total), place.",
-  "start_date": "2026-11-21",
+  "start_date": "2026-11-20",
+  "skip_dates": ["2026-11-20"],
   "hashtags_default": "#friends #hangout #meetup #weekendplans #halfwise",
   "posts": [
     {"city": "Greater Toronto Area", "hook": "Where should 4 friends in the GTA meet?", "people": "Maya@43.5933,-79.6441|Jordan@43.7757,-79.2578|Leah@43.8255,-79.5385|Omar@43.6383,-79.4201", "tags": "#toronto #gta #mississauga #scarborough #torontofood"},

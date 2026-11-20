@@ -109,6 +109,10 @@ def post_facebook(page, video, caption):
 
 
 def main():
+    sched = json.loads((ROOT / "social" / "schedule.json").read_text())
+    if not os.environ.get("POST_INDEX", "").strip() and dt.date.today().isoformat() in sched.get("skip_dates", []):
+        print("Today is in skip_dates (already posted by hand); nothing to do.")
+        return
     i, e, caption = pick_entry()
     for attempt in range(4):  # if a city fails to record, fall back to the next entry
         video = ROOT / f"reel-{i}.mp4"
