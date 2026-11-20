@@ -9,6 +9,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://gc.zgo.at https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://server.arcgisonline.com https://halfwise.goatcounter.com; connect-src 'self' https://photon.komoot.io https://nominatim.openstreetmap.org https://overpass-api.de https://overpass.private.coffee https://maps.mail.ru https://overpass.kumi.systems https://routing.openstreetmap.de https://router.project-osrm.org https://tiles.halfwise.app https://halfwise.goatcounter.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Halfwise: find the fair place to meet</title>
 <meta name="description" content="Add up to 10 friends and Halfwise finds the fairest place to meet, using real drive, transit, bike and walking times. Then find food, activities and free spots nearby.">
 <link rel="canonical" href="https://halfwise.app/">
@@ -26,7 +28,7 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://halfwise.app/og.jpg">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
@@ -375,7 +377,7 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
   </main>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
 <script>
 "use strict";
 /* ---------------- constants ---------------- */
@@ -1938,13 +1940,13 @@ $("invite").addEventListener("click", async () => {
   catch (e) { prompt("Copy this link:", url); }
 });
 function loadFromHash() {
-  const m = location.hash.match(/^#g=([A-Za-z0-9_-]+)/);
+  const m = location.hash.match(/^#g=([A-Za-z0-9_-]{1,6000})$/);
   if (!m) return false;
   try {
     const d = JSON.parse(b64urlDecode(m[1]));
     if (!d || !Array.isArray(d.p)) return false;
     people = d.p.slice(0, MAX_PEOPLE).map(([name, lat, lon, label], i) => ({ id: uid++, name: String(name || `Person ${i + 1}`).slice(0, 40), lat: +lat, lon: +lon, label: String(label || "Shared location").slice(0, 80), color: COLORS[i % COLORS.length] }))
-      .filter((p) => isFinite(p.lat) && isFinite(p.lon));
+      .filter((p) => isFinite(p.lat) && isFinite(p.lon) && Math.abs(p.lat) <= 85 && Math.abs(p.lon) <= 180);
     if (MODE_INFO[d.m]) settings.mode = d.m;
     if (GOALS[d.g]) settings.goal = d.g;
     if (typeof d.t === "string") settings.when = d.t;

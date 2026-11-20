@@ -79,3 +79,10 @@ The Contact page lists **hello@halfwise.app**. To receive those emails in your n
    - Approval usually takes a few days to a few weeks. It goes better once the About, FAQ and Privacy pages exist and the site has some visitors, for example from your first reels.
    - In AdSense, turn on Google's own consent message (**Privacy & messaging**). It's needed for visitors from Europe and the UK.
 3. **Optional:** a simple, privacy-friendly analytics tool, such as Cloudflare Web Analytics (free, in the same dashboard), to see how many people use it.
+
+## Security notes
+
+- The site has no server, accounts or database. Everything runs in the visitor's browser, so most server-side attacks don't apply.
+- The map library (Leaflet) is hosted in `vendor/leaflet/` instead of a third-party CDN.
+- Every page has a Content Security Policy listing the only servers it may contact. **When adding a new service** (for example Google AdSense), add its hosts to the policy in `index.html` and `tools/make_pages.py`, or the browser will block it.
+- Keys (R2, Meta) live only in GitHub Actions secrets and never reach the website. No workflow runs on pull requests from outside contributors.
