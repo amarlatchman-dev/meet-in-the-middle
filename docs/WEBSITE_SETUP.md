@@ -44,16 +44,23 @@ The old `amarlatchman-dev.github.io/meet-in-the-middle` address will redirect to
 Once the R2 bucket exists (see [R2_SETUP.md](R2_SETUP.md)):
 
 1. Open the bucket, then **Settings**, then **Custom Domains**, then **Connect Domain**.
-2. Enter `tiles.yourdomain.com`. Cloudflare adds the DNS record itself.
+2. Enter `tiles.halfwise.app`. Cloudflare adds the DNS record itself.
 3. Update the bucket's **CORS policy** so `AllowedOrigins` includes your domain:
-   `["https://yourdomain.com", "https://www.yourdomain.com", "https://amarlatchman-dev.github.io"]`
+   `["https://halfwise.app", "https://www.halfwise.app", "https://amarlatchman-dev.github.io"]`
 
 A custom domain avoids the rate limits on the `r2.dev` address, and you can turn the r2.dev address off afterwards.
+
+## 3b. Make hello@halfwise.app work (free)
+
+The Contact page lists **hello@halfwise.app**. To receive those emails in your normal inbox:
+1. In Cloudflare, open halfwise.app, then **Email**, then **Email Routing**, then **Get started**.
+2. Create the address `hello` and choose your personal email as the destination. Confirm the verification email Cloudflare sends.
+3. Let Cloudflare add the MX and TXT records it suggests.
 
 ## 4. Send Claude these
 
 - The domain, and whether you want `yourdomain.com` or `www.yourdomain.com` as the main address
-- The tiles address (`https://tiles.yourdomain.com/`)
+- The tiles address (`https://tiles.halfwise.app/`)
 - Confirmation that the four R2 secrets are added in GitHub
 
 ## 5. What Claude does next (in the repo)

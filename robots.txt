@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /data/
+Disallow: /tools/
+Disallow: /docs/
+
+Sitemap: https://halfwise.app/sitemap.xml

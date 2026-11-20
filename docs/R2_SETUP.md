@@ -25,7 +25,7 @@ In the bucket's **Settings**, find **CORS Policy**, click **Add CORS policy** (o
 ```json
 [
   {
-    "AllowedOrigins": ["https://amarlatchman-dev.github.io"],
+    "AllowedOrigins": ["https://halfwise.app", "https://www.halfwise.app", "https://amarlatchman-dev.github.io"],
     "AllowedMethods": ["GET", "HEAD"],
     "AllowedHeaders": ["*"],
     "MaxAgeSeconds": 86400
