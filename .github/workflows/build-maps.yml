@@ -31,7 +31,7 @@ permissions:
 
 concurrency:
   group: build-maps
-  cancel-in-progress: true
+  cancel-in-progress: false  # queue new builds instead of cancelling a running one
 
 jobs:
   plan:
