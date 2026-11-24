@@ -17,6 +17,9 @@
     --place   name to show for the meeting spot (otherwise looked up automatically)
     --mode    drive | transit | bike | walk     (default drive)
     --goal    fair | balanced | total            (default fair)
+    --want    any | food | drinks | coffee | activity | free   (what the group is looking for)
+    --feature venue | top5 | leave | compare | open | parking | free | mode   (what the ending shows)
+    --when    meeting time, "HH:MM" (next occurrence) or "YYYY-MM-DDTHH:MM"
     --url     site to record                     (default https://halfwise.app/)
     --out     output file                        (default reel.mp4)
 */
@@ -36,11 +39,19 @@ const people = (args.people || "").split("|").filter(Boolean).map((s) => {
 if (people.length < 2) { console.error("Give at least two people with --people"); process.exit(1); }
 
 const b64 = (str) => Buffer.from(str, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const group = { v: 1, p: people, m: args.mode || "drive", g: args.goal || "fair" };
+let when = args.when || "";
+if (/^\d{1,2}:\d{2}$/.test(when)) { // next occurrence of that clock time
+  const [h, m] = when.split(":").map(Number), d = new Date(); d.setHours(h, m, 0, 0);
+  if (d < new Date()) d.setDate(d.getDate() + 1);
+  const p2 = (n) => String(n).padStart(2, "0");
+  when = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(h)}:${p2(m)}`;
+}
+const group = { v: 1, p: people, m: args.mode || "drive", g: args.goal || "fair", w: args.want || "any", ...(when ? { t: when } : {}) };
 const base = args.url || "https://halfwise.app/";
 const qs = new URLSearchParams({ reel: "1" });
 if (args.city) qs.set("city", args.city);
 if (args.place) qs.set("place", args.place);
+if (args.feature) qs.set("feature", args.feature);
 const url = `${base}?${qs}#g=${b64(JSON.stringify(group))}`;
 const out = path.resolve(args.out || "reel.mp4");
 

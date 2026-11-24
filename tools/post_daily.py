@@ -38,8 +38,9 @@ def pick_entry():
         i = max(0, (dt.date.today() - start).days) % len(posts)
     e = posts[i]
     n = len(e["people"].split("|"))
+    body = e.get("caption") or "Everyone floods out along the real streets, and the fair spot is where they meet."
     caption = (
-        f"{e['hook']} 📍 Everyone floods out along the real streets, and the fair spot is where they meet.\n\n"
+        f"{e['hook']} 📍 {body}\n\n"
         f"Try it with your group: halfwise.app (link in bio)\n\n"
         f"{e.get('tags', '')} {sched.get('hashtags_default', '')}".strip()
     )
@@ -50,7 +51,7 @@ def pick_entry():
 def record(e, out):
     cmd = ["node", str(ROOT / "tools" / "record_reel.js"), "--people", e["people"],
            "--city", e["city"], "--out", str(out)]
-    for k in ("mode", "goal", "place"):
+    for k in ("mode", "goal", "place", "want", "feature", "when"):
         if e.get(k):
             cmd += [f"--{k}", e[k]]
     subprocess.run(cmd, check=True)

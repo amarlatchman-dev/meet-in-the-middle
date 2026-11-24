@@ -313,6 +313,14 @@ body.reel .leaflet-tooltip.meet-tag { font-size: 26px; padding: 6px 14px; }
 body.reel .pin-avatar { transform: scale(1.5); }
 body.reel .reel-brand { display: flex; position: absolute; z-index: 600; left: 0; right: 0; bottom: 6%; justify-content: center; align-items: center; gap: 14px; font: 700 34px var(--f-display); color: var(--text); text-shadow: 0 2px 12px #000; pointer-events: none; }
 body.reel .reel-brand img { width: 52px; height: 52px; }
+.reel-card { display: none; }
+body.reel .reel-card:not([hidden]) { display: flex; flex-direction: column; gap: 14px; position: absolute; z-index: 650; left: 56px; right: 56px; bottom: 15%; padding: 34px 38px; border-radius: 30px; background: rgba(8,12,16,.92); border: 2px solid rgba(255,255,255,.14); box-shadow: 0 20px 60px rgba(0,0,0,.6); animation: ecIn .5s ease both; }
+.reel-card .rc-title { font: 700 40px/1.15 var(--f-display); color: var(--accent); }
+.reel-card .rc-row { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; font: 600 33px/1.25 var(--f-body); color: var(--text); }
+.reel-card .rc-row b { font-weight: 700; color: var(--c, var(--text)); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reel-card .rc-row span { font-family: var(--f-mono); font-size: 29px; color: #c9d6dd; white-space: nowrap; }
+.reel-card .rc-row.hi span, .reel-card .rc-row.hi b { color: #b8f24a; }
+.reel-card .rc-note { font: 500 27px var(--f-body); color: var(--muted); }
 body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 700; inset: 0; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: rgba(5,8,11,.88); animation: ecIn .6s ease both; }
 .endcard img { width: 180px; height: 180px; }
 .endcard .ec-name { font: 700 96px var(--f-display); color: var(--text); }
@@ -426,6 +434,7 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
     <button id="replay" hidden>Replay</button>
     <button id="skip" hidden>Skip animation ▸</button>
     <div class="reel-brand" aria-hidden="true"><img src="icon.svg" alt=""><span>halfwise.app</span></div>
+    <div class="reel-card" id="reel-card" hidden></div>
     <div class="endcard" id="endcard" hidden>
       <img src="icon.svg" alt="">
       <div class="ec-name">Half<b>wise</b></div>
@@ -2462,15 +2471,74 @@ function planDownloadIcs() {
 
 /* ---------------- reel mode ---------------- */
 // After the floods meet, reveal the best venue, then the end card.
+// &feature= picks what the reel shows after the floods meet:
+//   venue (default), top5, leave, compare, open, parking, free, mode
 async function reelFinale(R) {
-  const end = () => setTimeout(() => { $("endcard").hidden = false; document.body.dataset.reelDone = "1"; }, 3200);
-  for (let i = 0; i < 40 && !(R.venues && R.venues.length) && result === R; i++) await new Promise((r) => setTimeout(r, 200));
-  await new Promise((r) => setTimeout(r, 1400));
-  if (result === R && R.venues && R.venues.length) {
-    await pickVenue(0);
-    const v = R.venues[0], longest = Math.round(Math.max(...v.t) / 60);
-    setHud(`Meet at ${v.name}`, `No one travels more than ${longest} min`, "#ffffff");
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const end = (ms) => setTimeout(() => { $("reel-card").hidden = true; $("endcard").hidden = false; document.body.dataset.reelDone = "1"; }, ms || 3200);
+  const card = (title, rows, note) => {
+    const el = $("reel-card");
+    el.innerHTML = `<div class="rc-title">${escapeHtml(title)}</div>` + rows.map((r) => `<div class="rc-row${r.hi ? " hi" : ""}" style="${r.c ? "--c:" + r.c : ""}"><b>${escapeHtml(r.a)}</b><span>${escapeHtml(r.b)}</span></div>`).join("") + (note ? `<div class="rc-note">${escapeHtml(note)}</div>` : "");
+    el.hidden = false;
+  };
+  const feature = QS.get("feature") || "venue", N = R.people.length;
+  const nameOf = (k) => (people.find((q) => q.id === R.people[k].id) || R.people[k]).name;
+  const mins = (s) => `${Math.round(s / 60)} min`;
+  for (let i = 0; i < 50 && !(R.venues && R.venues.length) && result === R; i++) await wait(200);
+  await wait(1200);
+  if (result !== R) return end();
+  const v = R.venues && R.venues[0], at = meetDate();
+
+  if (feature === "compare" && R.options) {
+    const rows = Object.keys(GOALS).filter((g) => R.options[g]).map((g) => ({ a: GOALS[g].label, b: `longest ${mins(R.options[g].max)}`, hi: g === R.goal }));
+    setHud("3 ways to be fair", `${N} friends, 3 different spots`, "#ffffff");
+    card("Which spot would you pick?", rows, "Fairest keeps the longest trip short. Least total saves the most time overall.");
+    return end(5200);
   }
+  if (!v) { setHud(`Meet near ${R.place ? R.place.main : "the middle"}`, (GOALS[R.goal] || GOALS.fair).hud, "#ffffff"); return end(); }
+
+  if (feature === "top5") {
+    setHud(`Top ${R.venues.length} places for ${N} friends`, "Ranked by everyone's real travel time", "#ffffff");
+    card("Best places for the group", R.venues.map((x, i) => ({ a: `${i + 1}. ${x.name}`, b: `max ${mins(Math.max(...x.t))}`, hi: i === 0 })));
+    await wait(3800); $("reel-card").hidden = true;
+    await pickVenue(0);
+    setHud(`Meet at ${v.name}`, `No one travels more than ${mins(Math.max(...v.t))}`, "#ffffff");
+    return end();
+  }
+  await pickVenue(0);
+  const longest = mins(Math.max(...v.t));
+  if (feature === "leave") {
+    setHud(`Meet at ${v.name}`, `Everyone arrives at ${fmtClock(at)}`, "#ffffff");
+    card("Leave at", R.dist.map((d, k) => ({ a: nameOf(k), b: fmtClock(new Date(at.getTime() - Math.ceil(d.secs / 60) * 60000), at), c: R.people[k].color })), "Halfwise tells everyone when to leave.");
+    return end(5200);
+  }
+  if (feature === "open") {
+    const st = v.open === true ? `Open at ${fmtClock(at)} ✓` : "Check hours before you go";
+    setHud(`Meet at ${v.name}`, st, "#ffffff");
+    card(`Still open at ${fmtClock(at)}`, R.venues.slice(0, 3).map((x, i) => ({ a: x.name, b: x.open === true ? "open ✓" : x.open === false ? "closed" : "hours?", hi: i === 0 })), "Filter to places open when you meet.");
+    return end(5000);
+  }
+  if (feature === "parking") {
+    // nearest lots, preferring ones whose price is known (free first)
+    const rank = (p) => ({ free: 0, paid: 1, unknown: 2 }[parkFee(p.tags)]);
+    const lots = (nearby && nearby.list || []).filter((p) => p.cats.includes("parking")).map((p) => ({ p, d: hav(v.lat, v.lon, p.lat, p.lon) }))
+      .filter((x) => x.d < 900).sort((a, b) => rank(a.p) - rank(b.p) || a.d - b.d).slice(0, 3);
+    setHud(`Meet at ${v.name}`, `No one drives more than ${longest}`, "#ffffff");
+    if (lots.length) card("Parking nearby", lots.map(({ p, d }) => ({ a: p.name, b: parkFee(p.tags) === "unknown" ? `${fmtKm(d)} away` : `${parkFee(p.tags) === "free" ? "Free" : "Paid"} · ${fmtKm(d)}`, hi: parkFee(p.tags) === "free" })), "Free and paid lots near the spot.");
+    return end(lots.length ? 5000 : 3200);
+  }
+  if (feature === "free") {
+    setHud(`Meet at ${v.name}`, "Costs $0 · fair for everyone", "#ffffff");
+    card("Free hangout spots", R.venues.slice(0, 3).map((x, i) => ({ a: x.name, b: poiKind(x.tags).split(" · ")[0], hi: i === 0 })), "Parks, libraries, malls and more.");
+    return end(5000);
+  }
+  if (feature === "mode") {
+    const label = (MODE_INFO[R.mode] || MODE_INFO.drive).label;
+    setHud(`Meet at ${v.name}`, `By ${label}: no one travels more than ${longest}`, "#ffffff");
+    card(`Travel times by ${label}`, R.dist.map((d, k) => ({ a: nameOf(k), b: mins(d.secs), c: R.people[k].color })));
+    return end(5000);
+  }
+  setHud(`Meet at ${v.name}`, `No one travels more than ${longest}`, "#ffffff");
   end();
 }
 // ?reel=1 shows a clean vertical view for recording social videos. Combine with an invite
