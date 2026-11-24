@@ -9,7 +9,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://gc.zgo.at https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://server.arcgisonline.com https://halfwise.goatcounter.com; connect-src 'self' https://photon.komoot.io https://nominatim.openstreetmap.org https://overpass-api.de https://overpass.private.coffee https://maps.mail.ru https://overpass.kumi.systems https://routing.openstreetmap.de https://router.project-osrm.org https://tiles.halfwise.app https://halfwise.goatcounter.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://gc.zgo.at https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://server.arcgisonline.com https://halfwise.goatcounter.com; connect-src 'self' https://photon.komoot.io https://nominatim.openstreetmap.org https://overpass-api.de https://overpass.private.coffee https://maps.mail.ru https://overpass.kumi.systems https://routing.openstreetmap.de https://router.project-osrm.org https://tiles.halfwise.app https://api.halfwise.app http://localhost:8787 https://halfwise.goatcounter.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Halfwise: find the fair place to meet</title>
 <meta name="description" content="Add up to 10 friends and Halfwise finds the fairest place to meet, using real drive, transit, bike and walking times. Then find food, activities and free spots nearby.">
@@ -141,7 +141,31 @@ h1 span { color: var(--accent); }
 .when-row { display: flex; gap: 8px; margin-top: 8px; }
 .when-row input { flex: 1; min-width: 0; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 .invite-row { margin-top: 8px; }
+.invite-row { display: flex; flex-direction: column; gap: 6px; }
 .invite-row .ghost { width: 100%; }
+#plan-start { width: 100%; border: 0; border-radius: 10px; padding: 10px; background: #2a3b2c; color: #c9f7a8; font: 700 14px var(--f-display); border: 1px solid #3f6b46; }
+#plan-start:hover { border-color: #b8f24a; }
+#planbar { background: #142018; border: 1px solid #2f5a3b; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+#planbar .pb-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+#planbar .pb-title { font: 700 15px var(--f-display); color: #c9f7a8; }
+#planbar .pb-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+#planbar button { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--text); }
+#planbar button.primary { background: #b8f24a; border-color: #b8f24a; color: #10200a; font-weight: 700; }
+#planbar .pb-members { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+#planbar .pb-members span { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; }
+#planbar .pb-members span.wait { color: var(--muted); border-style: dashed; }
+#planbar .pb-members span.me { border-color: #b8f24a; }
+#planbar .pb-form { display: flex; gap: 6px; }
+#planbar .pb-form input { flex: 1; min-width: 0; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+#planbar .pb-hint { color: #c9d6dd; margin: 0; }
+.vvotes { font-size: 12px; color: #c9f7a8; }
+.vact button.vote { background: var(--raise); border: 1px solid #3f6b46; color: #c9f7a8; font-weight: 600; }
+.vact button.vote.on { background: #b8f24a; color: #10200a; border-color: #b8f24a; }
+.vact button.lock { background: var(--raise); border: 1px solid var(--accent); color: var(--accent); font-weight: 600; }
+.locked { background: #2a2510; border: 1px solid var(--accent); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.locked b { font: 700 17px var(--f-display); }
+.locked .lk-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.locked .lk-btns a, .locked .lk-btns button { font-size: 12.5px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--raise); color: var(--text); text-decoration: none; }
 .join-banner { margin-top: 8px; font-size: 12.5px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: #1b2a1f; border: 1px solid #2f5a3b; color: var(--text); }
 .toast { position: fixed; z-index: 2000; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--text); color: var(--ink); padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
 .leave { color: var(--accent); }
@@ -312,6 +336,7 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
 <body>
 <div id="app">
   <aside id="panel">
+    <section id="planbar" hidden aria-live="polite"></section>
     <header>
       <h1>Half<span>wise</span></h1>
       <p class="lede">Add up to 10 starting points. Each one floods outward along the real streets, and the fairest meeting spot is where the floods meet.</p>
@@ -335,8 +360,9 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
         <span class="label" id="count">0 / 10</span>
       </div>
       <ul id="people"></ul>
-      <div class="invite-row">
-        <button class="ghost" id="invite">Invite friends to add their location</button>
+      <div class="invite-row" id="invite-row">
+        <button id="plan-start">Start a group plan</button>
+        <button class="ghost" id="invite">Or share a one-time link</button>
       </div>
       <div class="join-banner" id="join" hidden></div>
       <div class="example-chip" id="example" hidden>Example group across the GTA. Adding someone replaces it, or <button id="clear">clear it now</button>.</div>
@@ -493,10 +519,12 @@ function syncMarkers() {
       m = L.marker([p.lat, p.lon], { icon: personIcon(p), draggable: true, zIndexOffset: 500 }).addTo(map);
       m.on("dragend", async () => {
         const ll = m.getLatLng();
+        if (plan && !planCanEdit(p)) { m.setLatLng([p.lat, p.lon]); return toast("You can only move your own pin."); }
         p.lat = ll.lat; p.lon = ll.lng; p.label = "Dropped pin";
         isExample = false; invalidate(); renderList(); save();
+        if (plan) planUpsert(p);
         const lbl = await reverseLabel(p.lat, p.lon);
-        if (lbl) { p.label = lbl; renderList(); save(); }
+        if (lbl) { p.label = lbl; renderList(); save(); if (plan) planUpsert(p); }
       });
       markers.set(p.id, m);
     }
@@ -568,12 +596,15 @@ function renderList() {
     inp.addEventListener("input", () => {
       p.name = inp.value || "Someone"; av.textContent = initial(p.name);
       syncMarkers(); if (result) renderResults(); save();
+      if (plan) planUpsertSoon(p);
     });
+    if (plan && !planCanEdit(p)) inp.readOnly = true;
     const where = document.createElement("div"); where.className = "where"; where.textContent = p.label;
     where.title = p.label;
     who.append(inp, where);
     const x = document.createElement("button"); x.className = "x"; x.innerHTML = "&times;"; x.setAttribute("aria-label", "Remove " + p.name);
-    x.addEventListener("click", () => { people = people.filter((q) => q !== p); isExample = false; invalidate(); refresh(); });
+    x.addEventListener("click", () => { if (plan) return planRemove(p); people = people.filter((q) => q !== p); isExample = false; invalidate(); refresh(); });
+    if (plan && !planCanEdit(p)) x.hidden = true;
     li.append(av, who, x);
     ul.appendChild(li);
   }
@@ -601,6 +632,7 @@ function addPerson(lat, lon, label) {
   people.push(p);
   invalidate();
   refresh();
+  if (plan) planUpsert(p);
   if (people.length > 1) fitToPeople(); else map.setView([lat, lon], 13);
   setTimeout(() => { const el = $("name-" + p.id); if (el) { el.focus(); el.select(); } }, 30);
   return p;
@@ -613,7 +645,9 @@ function bindSeg(id, key) {
   el.addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b || busy) return;
     if (settings[key] === b.dataset.v) return;
+    if (plan && !plan.hostKey) return toast("The host chooses this for the group.");
     settings[key] = b.dataset.v; paint(); save();
+    if (plan) planPushSettings();
     if (key === "mode") invalidate();
     else reapplyGoal();
     goalHint(); modeHint();
@@ -1482,7 +1516,7 @@ const easeOut = (u) => 1 - Math.pow(1 - u, 1.6);
 
 function play(skipSolo, instant) {
   stopAnim(); clearRoutes();
-  instant = instant || (!REEL && settings.anim === false);
+  instant = instant || (!REEL && settings.anim === false) || planQuiet;
   const R = result, N = R.people.length;
   const hudLine = (GOALS[R.goal] || GOALS.fair).hud;
   // flood until a little past the meeting point so the overlap is visible
@@ -1589,7 +1623,9 @@ let rankSeq = 0;
 function paintWant() { $("want").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === settings.want)); }
 $("want").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b || settings.want === b.dataset.v) return;
+  if (plan && !plan.hostKey) return toast("The host chooses this for the group.");
   settings.want = b.dataset.v; save(); paintWant();
+  if (plan) planPushSettings();
   track("want-" + settings.want, "Looking for " + WANTS[settings.want].label);
   if (result && nearby && nearby.R === result) { if (result.picked != null) { result.picked = null; } rankVenues(result); }
 });
@@ -1634,6 +1670,7 @@ async function rankVenues(R) {
   }).sort((a, b) => a.cost - b.cost).slice(0, 5);
   R.venues = scored;
   renderVenues();
+  if (plan) planApplyLock();
 }
 function renderVenues() {
   const box = $("venues"), R = result;
@@ -1647,7 +1684,7 @@ function renderVenues() {
   }
   const at = meetDate(), travel = (MODE_INFO[R.mode] || MODE_INFO.drive).gmaps;
   box.hidden = false;
-  box.innerHTML = `<div class="vh"><span class="label">Best places for your group</span><span class="label">${escapeHtml(want.label)}</span></div>` +
+  box.innerHTML = (plan ? planLockedHtml() : "") + `<div class="vh"><span class="label">Best places for your group</span><span class="label">${escapeHtml(want.label)}</span></div>` +
     R.venues.map((v, i) => {
       const times = v.t.map((s, k) => `<span style="--c:${R.people[k].color}">${escapeHtml((people.find((q) => q.id === R.people[k].id) || R.people[k]).name)} ${Math.round(s / 60)}</span>`).join("");
       const st = v.open === true ? `<span class="st-open">Open at ${fmtClock(at)}</span>` : v.open === false ? `<span class="st-closed">Closed at ${fmtClock(at)}</span>` : "Hours not listed";
@@ -1661,7 +1698,9 @@ function renderVenues() {
           <div class="vact">
             <button data-pick="${i}"${picked ? " disabled" : ""}>${picked ? "Picked ✓" : "Pick this"}</button>
             <a href="https://www.google.com/maps/dir/?api=1&destination=${v.lat.toFixed(6)},${v.lon.toFixed(6)}&travelmode=${travel}" target="_blank" rel="noopener">Directions</a>
+            ${plan ? planVenueButtons(v) : ""}
           </div>
+          ${plan ? planVoteLine(v) : ""}
         </div>
       </article>`;
     }).join("") + `<p class="note">Minutes are each person's estimated ${escapeHtml((MODE_INFO[R.mode] || MODE_INFO.drive).label)} time. Ranked by your fairness choice, then whether it's open when you meet.</p>`;
@@ -1999,7 +2038,9 @@ function syncWhen() {
   $("nb-open-label").textContent = `Open at ${fmtClock(meetDate())}`;
 }
 $("when").addEventListener("change", () => {
+  if (plan && !plan.hostKey) { syncWhen(); return toast("The host chooses the time."); }
   settings.when = $("when").value; save(); syncWhen();
+  if (plan) planPushSettings();
   if (result && result.dist) renderResults();
   renderNearby();
 });
@@ -2118,6 +2159,304 @@ function loadFromHash() {
   } catch (e) { console.warn("Couldn't read the shared link", e); return false; }
 }
 
+/* ---------------- live group plans ---------------- */
+// A shared plan on api.halfwise.app: friends join from a link, add their own location,
+// vote on the top places, and the host locks one in. Plans delete themselves after 7 days.
+let plan = null;        // { id, hostKey, meId, meKey, keys: {memberId: key}, data, version }
+let planQuiet = false;  // live updates re-run without the long animation
+let planTimer = 0, planAutoTimer = 0, planUpsertTimers = {};
+function apiBase() {
+  const q = new URLSearchParams(location.search).get("api");
+  return location.hostname === "localhost" && q ? q.replace(/\/$/, "") : "https://api.halfwise.app";
+}
+async function api(method, path, body, token) {
+  const r = await fetch(apiBase() + path, {
+    method, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(d.error || `Group plans are unavailable right now (${r.status}).`); e.status = r.status; throw e; }
+  return d;
+}
+function planStoreKey(id) { return "hw.plan." + id; }
+function planPersist() {
+  if (!plan) return;
+  try { localStorage.setItem(planStoreKey(plan.id), JSON.stringify({ hostKey: plan.hostKey, meId: plan.meId, meKey: plan.meKey, keys: plan.keys })); } catch (e) {}
+}
+function planLink() { return location.origin + location.pathname + "#plan=" + plan.id; }
+function planMe() { return plan && plan.data && plan.data.members.find((m) => m.id === plan.meId); }
+function planTokenFor(srvId) { return plan.hostKey || (srvId === plan.meId ? plan.meKey : plan.keys[srvId]); }
+function planCanEdit(p) { return !plan || !p.srvId || !!plan.hostKey || p.srvId === plan.meId || !!plan.keys[p.srvId]; }
+function venueKey(v) { return `${v.name}|${v.lat.toFixed(4)}|${v.lon.toFixed(4)}`; }
+
+$("plan-start").addEventListener("click", planStart);
+async function planStart() {
+  if (plan) return;
+  const btn = $("plan-start"); btn.disabled = true; btn.textContent = "Starting…";
+  try {
+    if (isExample) { people = []; isExample = false; invalidate(); refresh(); }
+    const r = await api("POST", "/plans", { settings: { mode: settings.mode, goal: settings.goal, want: settings.want, when: settings.when || toLocalInput(meetDate()) } });
+    plan = { id: r.id, hostKey: r.hostKey, meId: null, meKey: null, keys: {}, data: r.plan, version: r.plan.version };
+    for (const p of people) {
+      const m = await api("POST", `/plans/${plan.id}/members`, { name: p.name, lat: p.lat, lon: p.lon, label: p.label });
+      p.srvId = m.memberId; plan.keys[m.memberId] = m.memberKey; plan.data = m.plan;
+    }
+    planPersist();
+    history.replaceState(null, "", location.pathname + location.search + "#plan=" + plan.id);
+    track("plan-start", "Started a group plan");
+    planApply(plan.data, true);
+    planPoll();
+  } catch (e) { toast(e.message); plan = null; }
+  btn.disabled = false; btn.textContent = "Start a group plan";
+}
+async function planOpen(id) {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(planStoreKey(id))) || {}; } catch (e) {}
+  plan = { id, hostKey: saved.hostKey || null, meId: saved.meId || null, meKey: saved.meKey || null, keys: saved.keys || {}, data: null, version: 0 };
+  people = []; isExample = false; invalidate(); refresh();
+  renderPlanBar("Loading the group plan…");
+  try { planApply(await api("GET", `/plans/${id}`), true); planPoll(); }
+  catch (e) { toast(e.status === 404 ? "That group plan has expired or doesn't exist." : e.message); planExit(); }
+}
+function planPoll() {
+  clearTimeout(planTimer);
+  planTimer = setTimeout(async () => {
+    if (!plan) return;
+    if (!document.hidden) {
+      try {
+        const d = await api("GET", `/plans/${plan.id}?v=${plan.version}`);
+        if (plan && !d.unchanged) planApply(d);
+      } catch (e) { if (e.status === 404) { toast("This group plan has expired."); return planExit(); } }
+    }
+    planPoll();
+  }, 4000);
+}
+document.addEventListener("visibilitychange", () => { if (plan && !document.hidden) planPoll(); });
+// Server state -> people, settings, plan bar, votes, lock
+function planApply(d, first) {
+  if (!plan) return;
+  plan.data = d; plan.version = d.version;
+  let changedSettings = false;
+  for (const k of ["mode", "goal", "want", "when"]) {
+    if (d.settings[k] && settings[k] !== d.settings[k]) { settings[k] = d.settings[k]; changedSettings = true; }
+  }
+  if (changedSettings) {
+    $("mode").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === settings.mode));
+    $("goal").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === settings.goal));
+    paintWant(); syncWhen(); goalHint(); modeHint();
+  }
+  const located = d.members.filter((m) => m.lat != null && m.lon != null);
+  const sig = JSON.stringify(located.map((m) => [m.id, m.lat, m.lon])) + "|" + settings.mode + settings.goal + settings.want;
+  const old = new Map(people.filter((p) => p.srvId).map((p) => [p.srvId, p]));
+  const focused = document.activeElement && document.activeElement.id;
+  people = located.map((m) => {
+    const p = old.get(m.id) || { id: uid++, srvId: m.id };
+    if (focused !== "name-" + p.id) p.name = m.name;
+    Object.assign(p, { label: m.label || "Shared location", lat: m.lat, lon: m.lon, color: COLORS[d.members.indexOf(m) % COLORS.length] });
+    return p;
+  });
+  isExample = false;
+  renderPlanBar();
+  if (sig !== plan.sig || first) {
+    plan.sig = sig;
+    invalidate(); refresh();
+    if (people.length > 1) fitToPeople();
+    planAutoRun(first ? 300 : 1200);
+  } else {
+    renderList(); syncMarkers();
+    if (result && result.venues) renderVenues();
+    planApplyLock();
+  }
+}
+function planAutoRun(delay) {
+  clearTimeout(planAutoTimer);
+  planAutoTimer = setTimeout(async () => {
+    if (!plan || people.length < 2) return;
+    if (busy) return planAutoRun(800);
+    planQuiet = true;
+    try { await analyze(); } finally { planQuiet = false; }
+  }, delay);
+}
+async function planUpsert(p) {
+  if (!plan) return;
+  try {
+    if (p.srvId) {
+      const tok = planTokenFor(p.srvId); if (!tok) return;
+      planApply(await api("PUT", `/plans/${plan.id}/members/${p.srvId}`, { name: p.name, lat: p.lat, lon: p.lon, label: p.label }, tok));
+      return;
+    }
+    const me = planMe();
+    if (me && me.lat == null && plan.meKey) { // first location you add is yours
+      p.srvId = plan.meId; p.name = me.name;
+      planApply(await api("PUT", `/plans/${plan.id}/members/${plan.meId}`, { lat: p.lat, lon: p.lon, label: p.label }, plan.meKey));
+      track("plan-located", "Added location to a plan");
+      return;
+    }
+    const m = await api("POST", `/plans/${plan.id}/members`, { name: p.name, lat: p.lat, lon: p.lon, label: p.label });
+    p.srvId = m.memberId; plan.keys[m.memberId] = m.memberKey; planPersist(); planApply(m.plan);
+  } catch (e) { toast(e.message); }
+}
+function planUpsertSoon(p) { clearTimeout(planUpsertTimers[p.id]); planUpsertTimers[p.id] = setTimeout(() => planUpsert(p), 700); }
+async function planRemove(p) {
+  if (!p.srvId) return;
+  const tok = planTokenFor(p.srvId);
+  if (!tok) return toast("You can only remove yourself or people you added.");
+  try {
+    planApply(await api("DELETE", `/plans/${plan.id}/members/${p.srvId}`, undefined, tok));
+    if (p.srvId === plan.meId) { plan.meId = plan.meKey = null; planPersist(); }
+  } catch (e) { toast(e.message); }
+}
+async function planPushSettings() {
+  if (!plan || !plan.hostKey) return;
+  try { planApply(await api("PUT", `/plans/${plan.id}/settings`, { mode: settings.mode, goal: settings.goal, want: settings.want, when: settings.when || toLocalInput(meetDate()) }, plan.hostKey)); }
+  catch (e) { toast(e.message); }
+}
+async function planJoin(name) {
+  try {
+    const m = await api("POST", `/plans/${plan.id}/members`, { name });
+    plan.meId = m.memberId; plan.meKey = m.memberKey; planPersist();
+    track("plan-join", "Joined a group plan");
+    planApply(m.plan);
+  } catch (e) { toast(e.message); }
+}
+function planChooseMe(id) { plan.meId = id; plan.meKey = plan.keys[id] || null; planPersist(); renderPlanBar(); renderList(); if (result && result.venues) renderVenues(); }
+async function planLeave() {
+  if (plan.meId && plan.meKey && !plan.hostKey) { try { await api("DELETE", `/plans/${plan.id}/members/${plan.meId}`, undefined, plan.meKey); } catch (e) {} }
+  try { localStorage.removeItem(planStoreKey(plan.id)); } catch (e) {}
+  planExit();
+}
+function planExit() {
+  clearTimeout(planTimer); clearTimeout(planAutoTimer);
+  plan = null;
+  history.replaceState(null, "", location.pathname + location.search);
+  people.forEach((p) => delete p.srvId);
+  renderPlanBar(); refresh(); if (result && result.venues) renderVenues();
+}
+async function planShare() {
+  const url = planLink(), text = "Join our group plan on Halfwise: add where you're coming from and vote on where we go.";
+  track("plan-share", "Shared a group plan");
+  if (navigator.share) { try { await navigator.share({ title: "Halfwise group plan", text, url }); return; } catch (e) { if (e && e.name === "AbortError") return; } }
+  try { await navigator.clipboard.writeText(url); toast("Plan link copied. Paste it in your group chat."); }
+  catch (e) { prompt("Copy this link:", url); }
+}
+function renderPlanBar(msg) {
+  const bar = $("planbar");
+  $("invite-row").hidden = !!plan;
+  if (!plan) { bar.hidden = true; bar.textContent = ""; return; }
+  bar.hidden = false;
+  if (msg || !plan.data) { bar.innerHTML = `<p class="pb-hint">${escapeHtml(msg || "Loading…")}</p>`; return; }
+  const d = plan.data, me = planMe();
+  const chips = d.members.map((m) => `<span class="${m.lat == null ? "wait" : ""}${m.id === plan.meId ? " me" : ""}">${escapeHtml(m.name)}${m.id === plan.meId ? " (you)" : ""}${m.lat == null ? " · adding location" : ""}</span>`).join("");
+  let action = "";
+  if (!plan.meId && plan.hostKey && d.members.length && !plan.choseNone) {
+    action = `<p class="pb-hint">Which one is you?</p><div class="pb-btns">${d.members.map((m) => `<button data-me="${m.id}">${escapeHtml(m.name)}</button>`).join("")}<button data-me="">Not listed</button></div>`;
+  } else if (!plan.meId) {
+    action = `<p class="pb-hint">${plan.hostKey ? "Add yourself so you can vote." : "You're invited to plan where to meet. Add your name to join."}</p>
+      <form class="pb-form" id="pb-join"><input id="pb-name" maxlength="40" placeholder="Your name" aria-label="Your name" autocomplete="given-name"><button class="primary">Join</button></form>`;
+  } else if (me && me.lat == null) {
+    action = `<p class="pb-hint">Now add where you're coming from: tap <b>Use my location</b> or search an address below.</p>`;
+  } else if (d.locked) {
+    action = `<p class="pb-hint">Plan locked in. See the details under the map results.</p>`;
+  } else {
+    action = `<p class="pb-hint">${d.members.length < 2 ? "Share the link so friends can join." : "Vote on the places below." + (plan.hostKey ? " When everyone's voted, lock one in." : "")}</p>`;
+  }
+  bar.innerHTML = `<div class="pb-top"><span class="pb-title">Group plan${plan.hostKey ? " · you're the host" : ""}</span>
+    <div class="pb-btns"><button class="primary" id="pb-share">Share link</button><button id="pb-leave">Leave</button></div></div>
+    <div class="pb-members">${chips || '<span class="wait">No one yet</span>'}</div>${action}`;
+}
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.closest("#pb-share")) return planShare();
+  if (t.closest("#pb-leave")) return planLeave();
+  const me = t.closest("#planbar button[data-me]");
+  if (me) { if (me.dataset.me) planChooseMe(me.dataset.me); else { plan.meId = null; plan.choseNone = true; renderPlanBar(); } return; }
+  const vote = t.closest("#venues button[data-vote]");
+  if (vote) return planVote(+vote.dataset.vote);
+  const lock = t.closest("#venues button[data-lock]");
+  if (lock) return planLock(+lock.dataset.lock);
+  if (t.closest("#lk-unlock")) return planUnlock();
+  if (t.closest("#lk-ics")) return planDownloadIcs();
+  if (t.closest("#lk-copy")) return planCopyMessage();
+});
+document.addEventListener("submit", (e) => {
+  if (e.target.id !== "pb-join") return;
+  e.preventDefault();
+  const n = $("pb-name").value.trim();
+  if (!n) return $("pb-name").focus();
+  planJoin(n);
+});
+function planVotersFor(v) {
+  const d = plan.data, key = venueKey(v);
+  return Object.entries(d.votes || {}).filter(([, k]) => k === key).map(([mid]) => (d.members.find((m) => m.id === mid) || {}).name).filter(Boolean);
+}
+function planVenueButtons(v) {
+  const i = result.venues.indexOf(v), mine = plan.meId && (plan.data.votes || {})[plan.meId] === venueKey(v);
+  return (plan.meId ? `<button class="vote${mine ? " on" : ""}" data-vote="${i}">${mine ? "Voted ✓" : "Vote"}</button>` : "") +
+    (plan.hostKey ? `<button class="lock" data-lock="${i}">Lock it in</button>` : "");
+}
+function planVoteLine(v) {
+  const who = planVotersFor(v);
+  return who.length ? `<div class="vvotes">${who.length} vote${who.length > 1 ? "s" : ""}: ${who.map(escapeHtml).join(", ")}</div>` : "";
+}
+function venuePayload(v) { return { key: venueKey(v), name: v.name, lat: +v.lat.toFixed(5), lon: +v.lon.toFixed(5), kind: poiKind(v.tags).slice(0, 80) }; }
+async function planVote(i) {
+  const v = result && result.venues && result.venues[i]; if (!v || !plan.meKey) return;
+  const already = (plan.data.votes || {})[plan.meId] === venueKey(v);
+  try { planApply(await api("POST", `/plans/${plan.id}/vote`, { venue: already ? null : venuePayload(v) }, plan.meKey)); track("plan-vote", "Voted in a plan"); }
+  catch (e) { toast(e.message); }
+}
+async function planLock(i) {
+  const v = result && result.venues && result.venues[i]; if (!v || !plan.hostKey) return;
+  try { planApply(await api("POST", `/plans/${plan.id}/lock`, { venue: venuePayload(v), when: settings.when || toLocalInput(meetDate()) }, plan.hostKey)); track("plan-lock", "Locked in a plan"); }
+  catch (e) { toast(e.message); }
+}
+async function planUnlock() {
+  try { planApply(await api("POST", `/plans/${plan.id}/lock`, { venue: null }, plan.hostKey)); } catch (e) { toast(e.message); }
+}
+// When locked, everyone's view jumps to the chosen place (routes and leave times included)
+function planApplyLock() {
+  const lk = plan && plan.data && plan.data.locked;
+  if (!lk || !result || !result.venues) return;
+  const i = result.venues.findIndex((v) => venueKey(v) === lk.venue.key);
+  if (i >= 0 && result.picked !== i) pickVenue(i);
+}
+function planLockDate() { const lk = plan.data.locked; const d = new Date(lk.when || toLocalInput(meetDate())); return isNaN(d) ? meetDate() : d; }
+function planLockedHtml() {
+  const lk = plan.data && plan.data.locked; if (!lk) return "";
+  const when = planLockDate(), v = lk.venue;
+  const icsDate = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const end = new Date(when.getTime() + 2 * 3600000);
+  const gcal = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent("Meet at " + v.name)}&dates=${icsDate(when)}/${icsDate(end)}&details=${encodeURIComponent("Planned with Halfwise: " + planLink())}&location=${encodeURIComponent(`${v.name} (${v.lat},${v.lon})`)}`;
+  return `<div class="locked"><span class="label">Locked in</span><b>${escapeHtml(v.name)}</b>
+    <span>${escapeHtml(when.toLocaleString([], { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}</span>
+    <div class="lk-btns"><button id="lk-ics">Add to calendar</button><a href="${gcal}" target="_blank" rel="noopener">Google Calendar</a><button id="lk-copy">Copy message</button>
+    <a href="https://www.google.com/maps/dir/?api=1&destination=${v.lat},${v.lon}" target="_blank" rel="noopener">Directions</a>${plan.hostKey ? '<button id="lk-unlock">Change</button>' : ""}</div></div>`;
+}
+function planMessage() {
+  const v = plan.data.locked.venue, when = planLockDate();
+  const i = result && result.people ? result.people.findIndex((rp) => (people.find((q) => q.id === rp.id) || {}).srvId === plan.meId) : -1;
+  const leave = i >= 0 && result.dist && result.picked != null ? ` I'm leaving at ${fmtClock(new Date(when.getTime() - Math.ceil(result.dist[i].secs / 60) * 60000), when)}.` : "";
+  return `We're going to ${v.name}, ${when.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}.${leave} Plan: ${planLink()}`;
+}
+async function planCopyMessage() {
+  const msg = planMessage();
+  try { await navigator.clipboard.writeText(msg); toast("Message copied."); } catch (e) { prompt("Copy this message:", msg); }
+}
+function planDownloadIcs() {
+  const v = plan.data.locked.venue, when = planLockDate(), end = new Date(when.getTime() + 2 * 3600000);
+  const f = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const esc = (t) => String(t).replace(/[\\,;]/g, (c) => "\\" + c).replace(/\n/g, "\\n");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Halfwise//Group plan//EN", "BEGIN:VEVENT",
+    `UID:${plan.id}@halfwise.app`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(when)}`, `DTEND:${f(end)}`,
+    `SUMMARY:${esc("Meet at " + v.name)}`, `LOCATION:${esc(v.name)}`, `GEO:${v.lat};${v.lon}`,
+    `DESCRIPTION:${esc("Planned with Halfwise: " + planLink())}`, `URL:${planLink()}`, "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+  a.download = "halfwise-plan.ics"; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  track("plan-calendar", "Added a plan to a calendar");
+}
+
 /* ---------------- reel mode ---------------- */
 // After the floods meet, reveal the best venue, then the end card.
 async function reelFinale(R) {
@@ -2138,7 +2477,8 @@ const REEL = QS.has("reel");
 if (REEL) document.body.classList.add("reel");
 
 /* ---------------- boot ---------------- */
-const fromLink = (load(), loadFromHash());
+const planFromLink = (location.hash.match(/^#plan=([A-Za-z0-9_-]{22})$/) || [])[1];
+const fromLink = (load(), planFromLink ? false : loadFromHash());
 if (!fromLink && !people.length) {
   people = EXAMPLE.map((p, i) => ({ ...p, id: uid++, color: COLORS[i] }));
   isExample = true;
@@ -2150,6 +2490,7 @@ if (!WANTS[settings.want]) settings.want = "any";
 paintWant();
 refresh();
 if (!REEL) fitToPeople(); // reel mode frames the group itself (an animated fit would override it)
+if (planFromLink && !REEL) planOpen(planFromLink);
 if (REEL) {
   map.invalidateSize();
   map.options.zoomSnap = 0.1; // fine zoom so the group fills the frame

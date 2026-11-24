@@ -1,0 +1,18 @@
+# Halfwise group-plans API (Cloudflare Workers + Durable Objects, free plan)
+name = "halfwise-api"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true
+routes = [{ pattern = "api.halfwise.app", custom_domain = true }]
+
+[[durable_objects.bindings]]
+name = "PLAN"
+class_name = "Plan"
+
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Plan", "Limiter"]

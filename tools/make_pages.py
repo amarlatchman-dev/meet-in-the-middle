@@ -3,7 +3,7 @@
 """Generate Halfwise's content pages (about, faq, privacy, contact) from one template."""
 import datetime
 
-UPDATED = "November 20, 2026"
+UPDATED = "November 24, 2026"
 NAV = [("about.html", "How it works"), ("faq.html", "FAQ"), ("privacy.html", "Privacy"), ("contact.html", "Contact")]
 
 
@@ -102,7 +102,9 @@ FAQ_ITEMS = [
      "Major North American metros have a pre-built street map for instant results, including Toronto, Ottawa, Montreal, Vancouver, Calgary, New York, Chicago, Los Angeles, Houston, Dallas and many more. Elsewhere, Halfwise uses the free OpenStreetMap routing service. Transit mode only works inside the pre-built areas."),
     ("Why is a restaurant missing, or its hours wrong?",
      "Places and opening hours come from OpenStreetMap, which volunteers keep up to date. You can add or fix a place yourself at openstreetmap.org, and it will appear in Halfwise after the next monthly update."),
-    ("Do you store my location?", "No. Everything is calculated in your browser, and Halfwise has no accounts or database of users. See the privacy policy for the services your browser talks to."),
+    ("How do group plans work?",
+     "Tap Start a group plan and share the link in your group chat. Friends open it, type their name and add where they're coming from. No account needed. Everyone sees the same fair meeting spot and top places, votes on where to go, and the host locks one in. Then everyone can add it to their calendar."),
+    ("Do you store my location?", "Not for regular searches: those are calculated in your browser, and Halfwise has no accounts. If you join a group plan, your name and location (rounded to about 10 metres) are stored with that plan so the group can see them, and the plan is deleted automatically after 7 days. See the privacy policy."),
     ("Can I install it on my phone?", "Yes. Open halfwise.app in your phone's browser and choose Add to Home Screen (Safari) or Install app (Chrome)."),
 ]
 FAQ = "<h1>Frequently asked questions</h1>\n<p class=\"lead\">Quick answers about how Halfwise works.</p>\n" + "\n".join(
@@ -113,7 +115,7 @@ PRIVACY = f"""<h1>Privacy policy</h1>
 <p class="lead">Halfwise is built to work without knowing who you are. There are no accounts, and the locations you enter are processed in your browser.</p>
 
 <h2>What stays on your device</h2>
-<p>The people, locations, travel settings and meeting time you enter are saved in your browser's local storage so they're still there next time. They aren't sent to a Halfwise server, because Halfwise doesn't run one. Clearing your browser's site data removes them.</p>
+<p>The people, locations, travel settings and meeting time you enter are saved in your browser's local storage so they're still there next time. Unless you use a group plan (below), they aren't sent to a Halfwise server. Clearing your browser's site data removes them.</p>
 
 <h2>Services your browser talks to</h2>
 <p>To work, the site loads data from these services. Each receives the request your browser makes (including your IP address) under its own privacy policy:</p>
@@ -127,6 +129,10 @@ PRIVACY = f"""<h1>Privacy policy</h1>
 
 <h2>Your location</h2>
 <p>If you tap Use my location, your browser asks for permission first. The position is used to add you to the group and isn't stored anywhere except your own browser.</p>
+
+<h2>Group plans</h2>
+<p>If you start or join a group plan, Halfwise stores that plan on Cloudflare (our hosting provider) so everyone in the group can see it: each person's name, their location rounded to about 10 metres, the plan's travel settings and meeting time, votes, and the chosen place. Anyone with the plan link can see this, so only share it with your group. Plans are deleted automatically 7 days after they're created. You can leave a plan at any time, which removes your name, location and vote from it.</p>
+<p>To stop abuse, the service counts requests per IP address for a few minutes. IP addresses aren't stored with plans.</p>
 
 <h2>Invite links</h2>
 <p>An invite link contains the group's names, locations (rounded to about 10 metres), travel mode and meeting time, encoded in the link itself. Anyone who has the link can read them. Only share it with people you'd tell where you're coming from.</p>
