@@ -1,8 +1,7 @@
 name: Build road maps
 
 # Builds road and "things to do" tiles for every region in tools/regions.json,
-# in parallel, then uploads them to Cloudflare R2. Runs weekly so any region
-# whose download failed (the mirrors are flaky) is filled in on a later run.
+# in parallel, then uploads them to Cloudflare R2. Runs monthly (and on demand).
 # R2 upload needs these repository secrets: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
 # R2_SECRET_ACCESS_KEY, R2_BUCKET. Without them the tiles are kept as a
 # downloadable artifact on the run instead.
@@ -14,7 +13,7 @@ on:
         required: false
         default: ""
   schedule:
-    - cron: "17 6 * * 1"
+    - cron: "17 6 3 * *"  # monthly; run it by hand from the Actions tab when needed
   push:
     branches: [main]
     paths:  # only the map builders, so unrelated pushes (e.g. social posting) don't restart a build
@@ -160,7 +159,7 @@ jobs:
         with:
           name: region-${{ matrix.region.id }}
           path: out/${{ matrix.region.id }}
-          retention-days: 7
+          retention-days: 1
 
   publish:
     needs: build
@@ -219,7 +218,7 @@ jobs:
         with:
           name: all-regions
           path: upload
-          retention-days: 14
+          retention-days: 3
 
       - name: Update the repo's copy of selected regions (only until R2 is set up)
         if: env.R2_READY != '1'
