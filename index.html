@@ -2170,10 +2170,13 @@ function apiBase() {
   return location.hostname === "localhost" && q ? q.replace(/\/$/, "") : "https://api.halfwise.app";
 }
 async function api(method, path, body, token) {
-  const r = await fetch(apiBase() + path, {
-    method, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let r;
+  try {
+    r = await fetch(apiBase() + path, {
+      method, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (e) { throw new Error("Group plans can't be reached right now. Check your connection, or use a one-time share link instead."); }
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(d.error || `Group plans are unavailable right now (${r.status}).`); e.status = r.status; throw e; }
   return d;
@@ -2491,6 +2494,10 @@ paintWant();
 refresh();
 if (!REEL) fitToPeople(); // reel mode frames the group itself (an animated fit would override it)
 if (planFromLink && !REEL) planOpen(planFromLink);
+// Only offer group plans when the plans service is reachable
+$("plan-start").hidden = true;
+if (!REEL) fetch(apiBase() + "/health", { signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined })
+  .then((r) => { if (r.ok) $("plan-start").hidden = false; }).catch(() => {});
 if (REEL) {
   map.invalidateSize();
   map.options.zoomSnap = 0.1; // fine zoom so the group fills the frame
