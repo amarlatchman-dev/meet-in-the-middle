@@ -188,6 +188,31 @@ td small { display: block; color: var(--muted); font-size: 11px; }
 .site-foot .privacy-note { flex-basis: 100%; margin: 0 0 4px; color: var(--muted); line-height: 1.4; }
 .site-foot .privacy-note a { text-decoration: underline; }
 .site-foot .copy { flex-basis: 100%; color: var(--muted); opacity: .7; }
+.chips.want { margin-top: 8px; }
+.chips.want button { background: var(--raise); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; color: var(--muted); }
+.chips.want button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #1a1400; font-weight: 700; }
+#venues { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+#venues .vh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.venue { display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 12px; background: var(--raise); border: 1px solid var(--line); border-radius: 12px; }
+.venue.best { border-color: #4a5d2a; }
+.venue.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.venue.flash { animation: vflash 1.2s ease; }
+@keyframes vflash { 0%, 60% { background: #2a3440; } }
+.vrank { width: 26px; height: 26px; border-radius: 50%; background: var(--text); color: var(--ink); font: 700 13px/26px var(--f-display); text-align: center; }
+.venue.picked .vrank { background: var(--accent); }
+.vbody { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.vbody b { font: 600 15px var(--f-body); }
+.vbody small { color: var(--muted); font-size: 12px; }
+.vbadge { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #b8f24a; margin-left: 6px; }
+.vtimes { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 2px; }
+.vtimes span { font: 500 11.5px var(--f-mono); padding: 2px 7px; border-radius: 999px; border: 1px solid var(--c); color: var(--text); white-space: nowrap; }
+.vact { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.vact button, .vact a { font-size: 12.5px; padding: 6px 12px; border-radius: 8px; text-decoration: none; }
+.vact button { background: var(--accent); border: 0; color: #1a1400; font-weight: 700; }
+.vact button[disabled] { opacity: .7; cursor: default; }
+.vact a { color: var(--text); border: 1px solid var(--line); }
+.vpin { width: 26px; height: 26px; border-radius: 50%; background: #fff; color: var(--ink); border: 2px solid var(--ink); display: grid; place-items: center; font: 700 12px var(--f-display); box-shadow: 0 0 12px rgba(255,255,255,.6); cursor: pointer; }
+.vpin.picked { background: var(--accent); }
 #results { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 12px; }
 .meet-name { font: 700 22px/1.1 var(--f-display); margin: 4px 0 2px; text-wrap: balance; }
 .meet-sub { color: var(--muted); font-size: 12.5px; }
@@ -318,6 +343,12 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
     </section>
 
     <section>
+      <span class="label">What are you looking for?</span>
+      <div class="chips want" id="want" role="group" aria-label="What are you looking for">
+        <button data-v="any">Anything</button><button data-v="food">Food</button><button data-v="drinks">Drinks</button>
+        <button data-v="coffee">Coffee &amp; dessert</button><button data-v="activity">Activities</button><button data-v="free">Free</button>
+      </div>
+      <div style="height:12px"></div>
       <span class="label">Travel by</span>
       <div class="seg four" id="mode">
         <button data-v="drive" aria-pressed="true">Car</button>
@@ -345,6 +376,7 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
     <button id="go">Find the meeting spot</button>
     <label class="anim-toggle"><input type="checkbox" id="anim-on" checked> Play the flood animation</label>
     <div id="status" hidden></div>
+    <section id="venues" hidden></section>
     <section id="results" hidden></section>
     <section id="nearby" hidden>
       <div class="row"><span class="label">Things to do nearby</span><span class="label" id="nb-radius"></span></div>
@@ -405,7 +437,7 @@ const EXAMPLE = [
 
 /* ---------------- state ---------------- */
 let people = [];
-let settings = { mode: "drive", goal: "fair", when: "", anim: true };
+let settings = { mode: "drive", goal: "fair", when: "", anim: true, want: "any" };
 let isExample = false;
 let uid = 1;
 let G = null;          // road graph
@@ -1270,8 +1302,9 @@ async function finishResult() {
 }
 async function finishResultAndNearby() {
   const R = result;
+  R.picked = null; R.venues = null; renderVenues();
   const p = finishResult();
-  if (!REEL) loadNearby(R);
+  loadNearby(R);
   await p;
 }
 
@@ -1318,7 +1351,7 @@ function renderResults() {
   }).join("");
   box.innerHTML = `
     <div>
-      <span class="label">Meet near</span>
+      <span class="label">${R.picked != null ? "Meet at" : "Meet near"}</span>
       <div class="meet-name">${escapeHtml(name)}</div>
       <div class="meet-sub">${escapeHtml(area)}<span style="font-family:var(--f-mono)">${ll}</span></div>
     </div>
@@ -1477,7 +1510,7 @@ function play(skipSolo, instant) {
       anim.running = false; $("replay").hidden = false; $("skip").hidden = true;
       const nm = R.place ? R.place.main : "the middle";
       setHud(`Meet near ${nm}`, hudLine, "#ffffff");
-      if (REEL) setTimeout(() => { $("endcard").hidden = false; document.body.dataset.reelDone = "1"; }, 3000);
+      if (REEL) reelFinale(R);
     }
   };
   const frame = (now) => {
@@ -1540,6 +1573,126 @@ function showMeetMarker() {
       .on("click", () => selectGoal(g)).addTo(map);
     altMarkers.push(m);
   }
+}
+/* ---------------- venue-first results ---------------- */
+// Ranks real places near the meeting spot by everyone's actual travel time to each one.
+const WANTS = {
+  any: { label: "Anything", cats: ["food", "activity"] },
+  food: { label: "Food", cats: ["restaurant", "fastfood"] },
+  drinks: { label: "Drinks", cats: ["bars"] },
+  coffee: { label: "Coffee & dessert", cats: ["cafe", "dessert"] },
+  activity: { label: "Activities", cats: ["activity"] },
+  free: { label: "Free", cats: ["free"] },
+};
+const venueLayer = L.layerGroup().addTo(map);
+let rankSeq = 0;
+function paintWant() { $("want").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === settings.want)); }
+$("want").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b || settings.want === b.dataset.v) return;
+  settings.want = b.dataset.v; save(); paintWant();
+  track("want-" + settings.want, "Looking for " + WANTS[settings.want].label);
+  if (result && nearby && nearby.R === result) { if (result.picked != null) { result.picked = null; } rankVenues(result); }
+});
+// minutes-scale cost of a venue for the chosen fairness rule
+function venueMetric(t, goal) {
+  const n = t.length, mx = Math.max(...t), sum = t.reduce((a, b) => a + b, 0);
+  if (goal === "total") return sum / n;
+  if (goal === "balanced") return Math.sqrt(t.reduce((a, b) => a + b * b, 0) / n);
+  return mx + 0.05 * sum;
+}
+async function rankVenues(R) {
+  const seq = ++rankSeq;
+  if (!nearby || nearby.R !== R) return;
+  const want = WANTS[settings.want] || WANTS.any;
+  const cand = nearby.list.filter((p) => !p.cats.includes("parking") && p.cats.some((c) => want.cats.includes(c))).slice(0, 40).map((p) => ({ ...p }));
+  if (!cand.length) { R.venues = []; renderVenues(); return; }
+  $("venues").hidden = false;
+  $("venues").innerHTML = `<div class="vh"><span class="label">Best places for your group</span></div><p class="note"><span class="spin" style="display:inline-block;vertical-align:-2px;margin-right:8px"></span>Checking everyone's travel time to ${cand.length} places…</p>`;
+  if (R.kind === "roads") {
+    for (const v of cand) {
+      const n = snapNode(v.lat, v.lon), off = n >= 0 ? hav(v.lat, v.lon, G.lat[n], G.lon[n]) : Infinity;
+      if (off > 500) continue; // not near any mapped street
+      v.node = n;
+      v.t = R.flood.map((f) => f.dist[n] + off / WALK_MS);
+      v.m = R.flood.map((f) => f.meters[n] + off);
+    }
+  } else {
+    try {
+      const res = await tableTo(R.mode, cand.map((v) => [v.lat, v.lon]));
+      if (seq !== rankSeq || result !== R) return;
+      cand.forEach((v, k) => { if (res[k] && res[k].t.every((x) => x < Infinity)) { v.t = res[k].t; v.m = res[k].m; } });
+    } catch (e) { /* fall through to straight-line ranking below */ }
+  }
+  if (seq !== rankSeq || result !== R) return;
+  const at = meetDate();
+  const scored = cand.filter((v) => v.t && v.t.every((x) => x < Infinity)).map((v) => {
+    const open = openAt(v.tags.opening_hours, at);
+    const detail = (v.tags.cuisine ? 0.5 : 0) + (v.tags.website ? 0.5 : 0) + (v.tags.opening_hours ? 0.5 : 0);
+    v.open = open;
+    v.cost = venueMetric(v.t, R.goal) / 60 + (open === false ? 25 : open === null ? 3 : 0) - detail;
+    return v;
+  }).sort((a, b) => a.cost - b.cost).slice(0, 5);
+  R.venues = scored;
+  renderVenues();
+}
+function renderVenues() {
+  const box = $("venues"), R = result;
+  venueLayer.clearLayers();
+  if (!R || !R.venues) { box.hidden = true; return; }
+  const want = WANTS[settings.want] || WANTS.any;
+  if (!R.venues.length) {
+    box.hidden = false;
+    box.innerHTML = `<div class="vh"><span class="label">Best places for your group</span></div><p class="note">No ${want.label === "Anything" ? "" : escapeHtml(want.label.toLowerCase()) + " "}places found near the meeting spot. Try another option above, or use the meeting spot below.</p>`;
+    return;
+  }
+  const at = meetDate(), travel = (MODE_INFO[R.mode] || MODE_INFO.drive).gmaps;
+  box.hidden = false;
+  box.innerHTML = `<div class="vh"><span class="label">Best places for your group</span><span class="label">${escapeHtml(want.label)}</span></div>` +
+    R.venues.map((v, i) => {
+      const times = v.t.map((s, k) => `<span style="--c:${R.people[k].color}">${escapeHtml((people.find((q) => q.id === R.people[k].id) || R.people[k]).name)} ${Math.round(s / 60)}</span>`).join("");
+      const st = v.open === true ? `<span class="st-open">Open at ${fmtClock(at)}</span>` : v.open === false ? `<span class="st-closed">Closed at ${fmtClock(at)}</span>` : "Hours not listed";
+      const picked = R.picked === i;
+      return `<article class="venue${i === 0 ? " best" : ""}${picked ? " picked" : ""}" id="venue-${i}">
+        <div class="vrank">${i + 1}</div>
+        <div class="vbody">
+          <b>${escapeHtml(v.name)}${i === 0 && R.picked == null ? '<span class="vbadge">Best pick</span>' : ""}</b>
+          <small>${escapeHtml(poiKind(v.tags))} · ${st}</small>
+          <div class="vtimes" aria-label="Travel time in minutes">${times}</div>
+          <div class="vact">
+            <button data-pick="${i}"${picked ? " disabled" : ""}>${picked ? "Picked ✓" : "Pick this"}</button>
+            <a href="https://www.google.com/maps/dir/?api=1&destination=${v.lat.toFixed(6)},${v.lon.toFixed(6)}&travelmode=${travel}" target="_blank" rel="noopener">Directions</a>
+          </div>
+        </div>
+      </article>`;
+    }).join("") + `<p class="note">Minutes are each person's estimated ${escapeHtml((MODE_INFO[R.mode] || MODE_INFO.drive).label)} time. Ranked by your fairness choice, then whether it's open when you meet.</p>`;
+  R.venues.forEach((v, i) => {
+    L.marker([v.lat, v.lon], { zIndexOffset: 950, title: v.name, icon: L.divIcon({ className: "", iconSize: [26, 26], iconAnchor: [13, 13], html: `<div class="vpin${R.picked === i ? " picked" : ""}">${i + 1}</div>` }) })
+      .bindTooltip(escapeHtml(v.name), { direction: "top", offset: [0, -12] })
+      .on("click", () => { const el = $("venue-" + i); if (el) { el.scrollIntoView({ behavior: "smooth", block: "nearest" }); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); } })
+      .addTo(venueLayer);
+  });
+}
+document.addEventListener("click", (e) => { const b = e.target.closest("#venues button[data-pick]"); if (b) pickVenue(+b.dataset.pick); });
+async function pickVenue(i) {
+  const R = result, v = R && R.venues && R.venues[i];
+  if (!v || busy) return;
+  if (anim.running) { stopAnim(); anim.phase = "done"; anim.drawn = R.all.keys.length; redrawFull(); $("replay").hidden = false; }
+  R.picked = i;
+  R.meetLL = [v.lat, v.lon];
+  R.place = { main: v.name, area: poiKind(v.tags) };
+  R.dist = v.t.map((s, k) => ({ secs: s, meters: v.m ? v.m[k] : NaN }));
+  if (R.kind === "roads" && v.node != null) {
+    R.paths = R.flood.map((f) => { const pts = [[v.lat, v.lon]]; let n = v.node; while (n >= 0) { pts.push([G.lat[n], G.lon[n]]); n = f.pred[n]; } return pts.reverse(); });
+  } else {
+    renderVenues();
+    const routes = await Promise.all(R.people.map((p) => osrm(R.mode, "route", [[p.lat, p.lon], [v.lat, v.lon]], "overview=full&geometries=geojson").then((j) => j.routes[0]).catch(() => null)));
+    if (result !== R || R.picked !== i) return;
+    R.paths = routes.map((rt, k) => rt ? rt.geometry.coordinates.map(([lo, la]) => [la, lo]) : [[R.people[k].lat, R.people[k].lon], [v.lat, v.lon]]);
+  }
+  clearRoutes(); startRoutes(); setRouteProgress(1); showMeetMarker();
+  renderResults(); syncMarkers(); renderVenues();
+  setHud(`Meet at ${v.name}`, (GOALS[R.goal] || GOALS.fair).hud, "#ffffff");
+  track("venue-pick", "Picked a venue");
 }
 /* ---------------- my location ---------------- */
 let locating = false;
@@ -1669,7 +1822,7 @@ function poiKind(t) {
   const cuisine = t.cuisine ? t.cuisine.split(";").slice(0, 2).map(pretty).join(", ") : "";
   return cuisine ? `${base} · ${cuisine}` : base;
 }
-function clearNearby() { nearby = null; poiLayer.clearLayers(); $("nearby").hidden = true; }
+function clearNearby() { nearby = null; poiLayer.clearLayers(); $("nearby").hidden = true; venueLayer.clearLayers(); $("venues").hidden = true; }
 
 // Places pre-built by tools/build_pois.py (data/pois/). Returns null when not covered.
 const poiTileCache = {};
@@ -1741,6 +1894,7 @@ async function loadNearby(R) {
   $("nb-radius").textContent = `within ${fmtKm(used)}`;
   if (!CATS.some((c) => c.id === nbFilter)) nbFilter = "all";
   renderNearby();
+  rankVenues(R);
 }
 $("nb-open").addEventListener("change", () => renderNearby());
 function renderNearby() {
@@ -1919,7 +2073,7 @@ function openAt(oh, date) {
 function b64urlEncode(str) { return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 function b64urlDecode(str) { return decodeURIComponent(escape(atob(str.replace(/-/g, "+").replace(/_/g, "/")))); }
 function groupLink() {
-  const data = { v: 1, p: people.map((p) => [p.name, +p.lat.toFixed(4), +p.lon.toFixed(4), p.label]), m: settings.mode, g: settings.goal, t: settings.when || toLocalInput(meetDate()) };
+  const data = { v: 1, p: people.map((p) => [p.name, +p.lat.toFixed(4), +p.lon.toFixed(4), p.label]), m: settings.mode, g: settings.goal, w: settings.want, t: settings.when || toLocalInput(meetDate()) };
   return location.origin + location.pathname + "#g=" + b64urlEncode(JSON.stringify(data));
 }
 let toastTimer = 0;
@@ -1951,6 +2105,7 @@ function loadFromHash() {
       .filter((p) => isFinite(p.lat) && isFinite(p.lon) && Math.abs(p.lat) <= 85 && Math.abs(p.lon) <= 180);
     if (MODE_INFO[d.m]) settings.mode = d.m;
     if (GOALS[d.g]) settings.goal = d.g;
+    if (typeof d.w === "string" && /^(any|food|drinks|coffee|activity|free)$/.test(d.w)) settings.want = d.w;
     if (typeof d.t === "string") settings.when = d.t;
     isExample = false;
     history.replaceState(null, "", location.pathname + location.search);
@@ -1964,6 +2119,18 @@ function loadFromHash() {
 }
 
 /* ---------------- reel mode ---------------- */
+// After the floods meet, reveal the best venue, then the end card.
+async function reelFinale(R) {
+  const end = () => setTimeout(() => { $("endcard").hidden = false; document.body.dataset.reelDone = "1"; }, 3200);
+  for (let i = 0; i < 40 && !(R.venues && R.venues.length) && result === R; i++) await new Promise((r) => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 1400));
+  if (result === R && R.venues && R.venues.length) {
+    await pickVenue(0);
+    const v = R.venues[0], longest = Math.round(Math.max(...v.t) / 60);
+    setHud(`Meet at ${v.name}`, `No one travels more than ${longest} min`, "#ffffff");
+  }
+  end();
+}
 // ?reel=1 shows a clean vertical view for recording social videos. Combine with an invite
 // link (#g=...) to choose the group; &place=Name overrides the meeting spot's name.
 const QS = new URLSearchParams(location.search);
@@ -1979,11 +2146,14 @@ if (!fromLink && !people.length) {
 flood.addTo(map);
 bindSeg("mode", "mode"); bindSeg("goal", "goal"); goalHint(); modeHint(); syncWhen();
 $("anim-on").checked = settings.anim !== false;
+if (!WANTS[settings.want]) settings.want = "any";
+paintWant();
 refresh();
 if (!REEL) fitToPeople(); // reel mode frames the group itself (an animated fit would override it)
 if (REEL) {
   map.invalidateSize();
   map.options.zoomSnap = 0.1; // fine zoom so the group fills the frame
+  map.removeLayer(poiLayer); // keep the reel uncluttered: only the venue pins show
   if (people.length > 1) map.fitBounds(L.latLngBounds(people.map((p) => [p.lat, p.lon])), { paddingTopLeft: [70, 420], paddingBottomRight: [70, 360], animate: false });
   setHud(`Where should ${people.length} friends meet?`, QS.get("city") || "");
   setTimeout(() => analyze(), 2200);
