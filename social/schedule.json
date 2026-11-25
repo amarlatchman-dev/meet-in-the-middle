@@ -51,6 +51,33 @@
       "caption": "Transit mode uses subway, streetcar and GO lines to find a spot fair for everyone without a car."
     },
     {
+      "city": "Stop arguing in the group chat",
+      "hook": "Stop arguing in the group chat",
+      "people": "Priyanka@43.6851,-79.7597|Devon@43.8696,-79.2870|Sasha@43.4675,-79.6877|Malik@43.8357,-79.0857",
+      "want": "any",
+      "feature": "top5",
+      "when": "19:30",
+      "caption": "Halfwise finds the spot that's fair for everyone and ranks the best places by real travel time. Group plans, solved."
+    },
+    {
+      "city": "We voted on where to eat",
+      "hook": "We voted on where to eat",
+      "people": "Ari@43.6623,-79.3307|Bea@43.6703,-79.4070|Cole@43.7680,-79.4130|Dina@43.6372,-79.5361|Eli@43.7064,-79.3986",
+      "want": "food",
+      "feature": "vote",
+      "when": "19:00",
+      "caption": "Start a group plan, share the link, everyone votes, lock it in. Calendar invite and leave-at times included."
+    },
+    {
+      "city": "Our friend group's fair spot",
+      "hook": "Our friend group's fair spot",
+      "people": "Kim@43.5933,-79.6441|Andre@43.7680,-79.4130|Bri@43.8696,-79.2870|Tom@43.7920,-79.5940",
+      "want": "any",
+      "feature": "leave",
+      "when": "19:00",
+      "caption": "Save your group once, then plan again in one tap. Everyone gets their own leave-at time."
+    },
+    {
       "city": "Durham Region",
       "hook": "Ajax, Whitby, Oshawa, Pickering: who drives least?",
       "people": "Tariq@43.8509,-79.0204|Emma@43.8975,-78.9429|Josh@43.8971,-78.8658|Ana@43.8357,-79.0857",

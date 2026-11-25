@@ -58,16 +58,17 @@ def page(fname, title, desc, body):
 """
 
 
-ABOUT = """<h1>Find the fair place to meet</h1>
-<p class="lead">Halfwise picks a meeting spot that's fair for everyone, using real travel times instead of a straight line on a map. Then it shows places to eat, things to do, and free spots nearby.</p>
+ABOUT = """<h1>Group plans, solved</h1>
+<p class="lead">Halfwise gets your group from "we should hang out" to "we're going to X at 7". It finds the spot that's fair for everyone using real travel times, ranks the best places to go, and lets the group vote and lock one in.</p>
 
 <h2>How it works</h2>
 <ol class="steps">
   <li><strong>Add everyone.</strong> Up to 10 people. Search an address, drop a pin, or use your current location. Or send the group an invite link so each person adds themselves.</li>
-  <li><strong>Pick how you're travelling.</strong> Car, transit, bike or walking, and when you're meeting.</li>
+  <li><strong>Say what you're up for.</strong> Food, drinks, coffee, activities or free spots, how everyone's travelling (car, transit, bike or walking), and when you're meeting.</li>
   <li><strong>Watch the floods.</strong> Each person's location floods outward along the real streets, first one by one and then all at once. Where they meet is where it's fair to meet.</li>
-  <li><strong>Choose your spot.</strong> Halfwise shows three options and how they compare, plus a route and a leave-at time for each person so you all arrive together.</li>
-  <li><strong>Find something to do.</strong> Restaurants by cuisine, cafés, bars, activities, parks and free public spaces near the spot, filtered to what's open when you meet.</li>
+  <li><strong>Get the best places.</strong> The top 5 places that are fair for everyone, with each person's travel time, whether it's open when you meet, and directions.</li>
+  <li><strong>Decide together.</strong> Start a group plan: friends join from a link, vote, and the host locks it in. Everyone gets a calendar invite and a leave-at time.</li>
+  <li><strong>Plan again in one tap.</strong> Save your groups ("Friday crew", "Family") and see your recent picks so you don't repeat the same place.</li>
 </ol>
 
 <h2>Three ways to be fair</h2>
@@ -102,6 +103,8 @@ FAQ_ITEMS = [
      "Major North American metros have a pre-built street map for instant results, including Toronto, Ottawa, Montreal, Vancouver, Calgary, New York, Chicago, Los Angeles, Houston, Dallas and many more. Elsewhere, Halfwise uses the free OpenStreetMap routing service. Transit mode only works inside the pre-built areas."),
     ("Why is a restaurant missing, or its hours wrong?",
      "Places and opening hours come from OpenStreetMap, which volunteers keep up to date. You can add or fix a place yourself at openstreetmap.org, and it will appear in Halfwise after the next monthly update."),
+    ("What are saved groups?",
+     "Tap Save this group to keep a group's names and locations in your browser. Next time, tap Load or Plan again to start a new plan with the same people in one tap. Saved groups and recent picks stay on your device only."),
     ("How do group plans work?",
      "Tap Start a group plan and share the link in your group chat. Friends open it, type their name and add where they're coming from. No account needed. Everyone sees the same fair meeting spot and top places, votes on where to go, and the host locks one in. Then everyone can add it to their calendar."),
     ("Do you store my location?", "Not for regular searches: those are calculated in your browser, and Halfwise has no accounts. If you join a group plan, your name and location (rounded to about 10 metres) are stored with that plan so the group can see them, and the plan is deleted automatically after 7 days. See the privacy policy."),

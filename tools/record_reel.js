@@ -18,7 +18,7 @@
     --mode    drive | transit | bike | walk     (default drive)
     --goal    fair | balanced | total            (default fair)
     --want    any | food | drinks | coffee | activity | free   (what the group is looking for)
-    --feature venue | top5 | leave | compare | open | parking | free | mode   (what the ending shows)
+    --feature venue | top5 | vote | leave | compare | open | parking | free | mode   (what the ending shows)
     --when    meeting time, "HH:MM" (next occurrence) or "YYYY-MM-DDTHH:MM"
     --url     site to record                     (default https://halfwise.app/)
     --out     output file                        (default reel.mp4)

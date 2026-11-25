@@ -21,7 +21,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Halfwise">
 <meta property="og:title" content="Halfwise: find the fair place to meet">
-<meta property="og:description" content="Everyone floods out along the real streets. Where the floods meet is your spot, with places to eat and things to do nearby.">
+<meta property="og:description" content="Group plans, solved: the fair spot for everyone, the best places nearby, and a vote to lock it in.">
 <meta property="og:url" content="https://halfwise.app/">
 <meta property="og:image" content="https://halfwise.app/og.jpg">
 <meta property="og:image:width" content="1200">
@@ -143,6 +143,35 @@ h1 span { color: var(--accent); }
 .invite-row { margin-top: 8px; }
 .invite-row { display: flex; flex-direction: column; gap: 6px; }
 .invite-row .ghost { width: 100%; }
+.save-row { margin-top: 8px; }
+.save-row .ghost { width: 100%; }
+.save-form { display: flex; gap: 6px; }
+.save-form input { flex: 1; min-width: 0; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.save-form button { background: var(--accent); border: 0; border-radius: 8px; padding: 0 14px; font-weight: 700; color: #1a1400; }
+#groups { display: flex; flex-direction: column; gap: 8px; }
+#groups .g-list { display: flex; flex-direction: column; gap: 6px; }
+.g-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 6px; background: var(--raise); border-radius: 10px; padding: 8px 8px 8px 12px; }
+.g-row b { font-weight: 600; display: block; }
+.g-row small { color: var(--muted); font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-row .g-main { min-width: 0; }
+.g-row button { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 12.5px; color: var(--text); }
+.g-row button.again { background: #2a3b2c; border-color: #3f6b46; color: #c9f7a8; font-weight: 700; }
+.g-row button.del { border: 0; color: var(--muted); font-size: 16px; padding: 4px 6px; }
+.recent { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.recent b { color: var(--text); font-weight: 600; }
+.vbeen { font-size: 11.5px; color: var(--muted); }
+.tour { position: fixed; inset: 0; z-index: 3000; background: rgba(0,0,0,.6); display: grid; place-items: center; padding: 16px; }
+.tour .t-box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px; max-width: 380px; width: 100%; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.tour .t-step { font: 600 11px var(--f-body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.tour h2 { font: 700 22px/1.2 var(--f-display); margin: 0; }
+.tour p { margin: 0; color: #c9d6dd; font-size: 14px; line-height: 1.5; }
+.tour .t-dots { display: flex; gap: 6px; }
+.tour .t-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.tour .t-dots i.on { background: var(--accent); }
+.tour .t-btns { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.tour .t-btns button { border-radius: 10px; padding: 9px 16px; font-weight: 700; border: 1px solid var(--line); background: none; color: var(--muted); }
+.tour .t-btns button.next { background: var(--accent); border-color: var(--accent); color: #1a1400; }
+body.reel .tour { display: none !important; }
 #plan-start { width: 100%; border: 0; border-radius: 10px; padding: 10px; background: #2a3b2c; color: #c9f7a8; font: 700 14px var(--f-display); border: 1px solid #3f6b46; }
 #plan-start:hover { border-color: #b8f24a; }
 #planbar { background: #142018; border: 1px solid #2f5a3b; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
@@ -345,6 +374,7 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
 <div id="app">
   <aside id="panel">
     <section id="planbar" hidden aria-live="polite"></section>
+    <section id="groups" hidden></section>
     <header>
       <h1>Half<span>wise</span></h1>
       <p class="lede">Add up to 10 starting points. Each one floods outward along the real streets, and the fairest meeting spot is where the floods meet.</p>
@@ -368,6 +398,10 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
         <span class="label" id="count">0 / 10</span>
       </div>
       <ul id="people"></ul>
+      <div class="save-row" id="save-row" hidden>
+        <button class="ghost" id="group-save">Save this group</button>
+        <form class="save-form" id="group-save-form" hidden><input id="group-name" maxlength="30" placeholder="Name it, e.g. Friday crew" aria-label="Group name"><button>Save</button></form>
+      </div>
       <div class="invite-row" id="invite-row">
         <button id="plan-start">Start a group plan</button>
         <button class="ghost" id="invite">Or share a one-time link</button>
@@ -435,6 +469,7 @@ body.reel .endcard:not([hidden]) { display: flex; position: absolute; z-index: 7
     <button id="skip" hidden>Skip animation ▸</button>
     <div class="reel-brand" aria-hidden="true"><img src="icon.svg" alt=""><span>halfwise.app</span></div>
     <div class="reel-card" id="reel-card" hidden></div>
+    <div class="tour" id="tour" hidden role="dialog" aria-modal="true" aria-labelledby="tour-title"></div>
     <div class="endcard" id="endcard" hidden>
       <img src="icon.svg" alt="">
       <div class="ec-name">Half<b>wise</b></div>
@@ -618,6 +653,7 @@ function renderList() {
     ul.appendChild(li);
   }
   $("count").textContent = `${people.length} / ${MAX_PEOPLE}`;
+  $("save-row").hidden = people.length < 2 || isExample || !!plan;
   $("example").hidden = !isExample;
   $("go").disabled = people.length < 2 || busy;
   $("q").disabled = people.length >= MAX_PEOPLE;
@@ -1674,7 +1710,9 @@ async function rankVenues(R) {
     const open = openAt(v.tags.opening_hours, at);
     const detail = (v.tags.cuisine ? 0.5 : 0) + (v.tags.website ? 0.5 : 0) + (v.tags.opening_hours ? 0.5 : 0);
     v.open = open;
-    v.cost = venueMetric(v.t, R.goal) / 60 + (open === false ? 25 : open === null ? 3 : 0) - detail;
+    v.been = recentFor(v);
+    const fast = (settings.want === "any" || settings.want === "food") && /^(fast_food|food_court)$/.test(v.tags.amenity || "") ? 3 : 0; // groups usually want somewhere to sit
+    v.cost = venueMetric(v.t, R.goal) / 60 + (open === false ? 25 : open === null ? 3 : 0) - detail + (v.been ? 4 : 0) + fast;
     return v;
   }).sort((a, b) => a.cost - b.cost).slice(0, 5);
   R.venues = scored;
@@ -1703,10 +1741,11 @@ function renderVenues() {
         <div class="vbody">
           <b>${escapeHtml(v.name)}${i === 0 && R.picked == null ? '<span class="vbadge">Best pick</span>' : ""}</b>
           <small>${escapeHtml(poiKind(v.tags))} · ${st}</small>
+          ${v.been ? `<span class="vbeen">You picked this ${escapeHtml(v.been)}</span>` : ""}
           <div class="vtimes" aria-label="Travel time in minutes">${times}</div>
           <div class="vact">
             <button data-pick="${i}"${picked ? " disabled" : ""}>${picked ? "Picked ✓" : "Pick this"}</button>
-            <a href="https://www.google.com/maps/dir/?api=1&destination=${v.lat.toFixed(6)},${v.lon.toFixed(6)}&travelmode=${travel}" target="_blank" rel="noopener">Directions</a>
+            <a href="https://www.google.com/maps/dir/?api=1&destination=${v.lat.toFixed(6)},${v.lon.toFixed(6)}&travelmode=${travel}" target="_blank" rel="noopener" onclick="track('venue-directions','Opened directions to a venue')">Directions</a>
             ${plan ? planVenueButtons(v) : ""}
           </div>
           ${plan ? planVoteLine(v) : ""}
@@ -1741,6 +1780,7 @@ async function pickVenue(i) {
   renderResults(); syncMarkers(); renderVenues();
   setHud(`Meet at ${v.name}`, (GOALS[R.goal] || GOALS.fair).hud, "#ffffff");
   track("venue-pick", "Picked a venue");
+  if (!REEL) rememberPick(v);
 }
 /* ---------------- my location ---------------- */
 let locating = false;
@@ -2168,6 +2208,92 @@ function loadFromHash() {
   } catch (e) { console.warn("Couldn't read the shared link", e); return false; }
 }
 
+/* ---------------- saved groups, recent picks, walkthrough ---------------- */
+// Stored only in this browser. No accounts.
+let plansAvailable = false;
+const GROUPS_KEY = "hw.groups", RECENT_KEY = "hw.recent";
+function readList(k) { try { const v = JSON.parse(localStorage.getItem(k)); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function writeList(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function shortDate(ts) { return new Date(ts).toLocaleDateString([], { month: "short", day: "numeric" }); }
+
+$("group-save").addEventListener("click", () => { $("group-save").hidden = true; $("group-save-form").hidden = false; $("group-name").focus(); });
+$("group-save-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("group-name").value.trim() || "My group";
+  const groups = readList(GROUPS_KEY).filter((g) => g.name.toLowerCase() !== name.toLowerCase());
+  groups.unshift({ id: Date.now().toString(36), name, saved: Date.now(), used: Date.now(),
+    people: people.map((p) => ({ name: p.name, lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5), label: p.label })),
+    mode: settings.mode, goal: settings.goal, want: settings.want });
+  writeList(GROUPS_KEY, groups.slice(0, 12));
+  $("group-name").value = ""; $("group-save-form").hidden = true; $("group-save").hidden = false;
+  toast(`Saved “${name}”. It's at the top of the panel next time.`);
+  track("group-save", "Saved a group");
+  renderGroups();
+});
+function loadGroup(g) {
+  if (plan) return toast("Leave the group plan first.");
+  people = g.people.slice(0, MAX_PEOPLE).map((p, i) => ({ ...p, id: uid++, color: COLORS[i % COLORS.length] }));
+  isExample = false;
+  for (const k of ["mode", "goal", "want"]) if (g[k]) settings[k] = g[k];
+  $("mode").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === settings.mode));
+  $("goal").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === settings.goal));
+  paintWant(); goalHint(); modeHint();
+  const groups = readList(GROUPS_KEY); const hit = groups.find((x) => x.id === g.id); if (hit) hit.used = Date.now();
+  writeList(GROUPS_KEY, groups.sort((a, b) => b.used - a.used));
+  invalidate(); refresh(); fitToPeople(); renderGroups();
+}
+function renderGroups() {
+  const box = $("groups"); if (!box) return;
+  const groups = readList(GROUPS_KEY), recent = readList(RECENT_KEY).slice(0, 3);
+  if (REEL || plan || (!groups.length && !recent.length)) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = (groups.length ? `<span class="label">Your groups</span><div class="g-list">` + groups.map((g) => `
+      <div class="g-row"><div class="g-main"><b>${escapeHtml(g.name)}</b><small>${g.people.map((p) => escapeHtml(p.name)).join(", ")}</small></div>
+        ${plansAvailable ? `<button class="again" data-again="${g.id}">Plan again</button>` : ""}<button data-load="${g.id}">Load</button>
+        <button class="del" data-del="${g.id}" aria-label="Delete ${escapeHtml(g.name)}">&times;</button></div>`).join("") + `</div>` : "") +
+    (recent.length ? `<div class="recent"><span class="label">Recent picks</span>${recent.map((r) => `<span><b>${escapeHtml(r.name)}</b> · ${shortDate(r.at)}${r.group ? " · " + escapeHtml(r.group) : ""}</span>`).join("")}</div>` : "");
+}
+document.addEventListener("click", (e) => {
+  const t = e.target, find = (id) => readList(GROUPS_KEY).find((g) => g.id === id);
+  const ld = t.closest("#groups button[data-load]"); if (ld) { const g = find(ld.dataset.load); if (g) { loadGroup(g); track("group-load", "Loaded a saved group"); } return; }
+  const ag = t.closest("#groups button[data-again]"); if (ag) { const g = find(ag.dataset.again); if (g) { loadGroup(g); track("plan-again", "Plan again with a saved group"); planStart(); } return; }
+  const dl = t.closest("#groups button[data-del]"); if (dl) { writeList(GROUPS_KEY, readList(GROUPS_KEY).filter((g) => g.id !== dl.dataset.del)); renderGroups(); }
+});
+function currentGroupName() {
+  const names = people.map((p) => p.name).sort().join("|");
+  const g = readList(GROUPS_KEY).find((x) => x.people.map((p) => p.name).sort().join("|") === names);
+  return g ? g.name : "";
+}
+function rememberPick(v) {
+  const key = venueKey(v);
+  const list = readList(RECENT_KEY).filter((r) => !(r.key === key && Date.now() - r.at < 864e5));
+  list.unshift({ key, name: v.name, lat: v.lat, lon: v.lon, at: Date.now(), group: currentGroupName() });
+  writeList(RECENT_KEY, list.slice(0, 20));
+  renderGroups();
+}
+// "on Nov 27" if this place was picked in the last 30 days (but not just now)
+function recentFor(v) {
+  const key = venueKey(v), hit = readList(RECENT_KEY).find((r) => r.key === key && Date.now() - r.at < 30 * 864e5 && Date.now() - r.at > 36e5);
+  return hit ? "on " + shortDate(hit.at) : "";
+}
+
+const TOUR = [
+  { t: "Add everyone", d: "Search an address, drop a pin, or tap Use my location. Up to 10 people. Or start a group plan and let friends add themselves." },
+  { t: "Say what you're up for", d: "Food, drinks, coffee, activities or free spots, plus how everyone's travelling and when you're meeting." },
+  { t: "Get the fair spot", d: "Halfwise finds where it's fair to meet, ranks the best places by everyone's travel time, and tells each person when to leave." },
+];
+function showTour(i) {
+  const el = $("tour"), s = TOUR[i];
+  el.innerHTML = `<div class="t-box"><span class="t-step">Step ${i + 1} of ${TOUR.length}</span><h2 id="tour-title">${s.t}</h2><p>${s.d}</p>
+    <div class="t-dots">${TOUR.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</div>
+    <div class="t-btns"><button id="tour-skip">${i === TOUR.length - 1 ? "Close" : "Skip"}</button><button class="next" id="tour-next">${i === TOUR.length - 1 ? "Let's go" : "Next"}</button></div></div>`;
+  el.hidden = false; $("tour-next").focus();
+  $("tour-next").onclick = () => { if (i < TOUR.length - 1) showTour(i + 1); else endTour("done"); };
+  $("tour-skip").onclick = () => endTour(i === TOUR.length - 1 ? "done" : "skip");
+}
+function endTour(how) { $("tour").hidden = true; try { localStorage.setItem("hw.tour", how); } catch (e) {} track("tour-" + how, "Walkthrough " + how); }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("tour").hidden) endTour("skip"); });
+
 /* ---------------- live group plans ---------------- */
 // A shared plan on api.halfwise.app: friends join from a link, add their own location,
 // vote on the top places, and the host locks one in. Plans delete themselves after 7 days.
@@ -2353,6 +2479,7 @@ async function planShare() {
 }
 function renderPlanBar(msg) {
   const bar = $("planbar");
+  renderGroups();
   $("invite-row").hidden = !!plan;
   if (!plan) { bar.hidden = true; bar.textContent = ""; return; }
   bar.hidden = false;
@@ -2472,7 +2599,7 @@ function planDownloadIcs() {
 /* ---------------- reel mode ---------------- */
 // After the floods meet, reveal the best venue, then the end card.
 // &feature= picks what the reel shows after the floods meet:
-//   venue (default), top5, leave, compare, open, parking, free, mode
+//   venue (default), top5, vote, leave, compare, open, parking, free, mode
 async function reelFinale(R) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const end = (ms) => setTimeout(() => { $("reel-card").hidden = true; $("endcard").hidden = false; document.body.dataset.reelDone = "1"; }, ms || 3200);
@@ -2497,6 +2624,16 @@ async function reelFinale(R) {
   }
   if (!v) { setHud(`Meet near ${R.place ? R.place.main : "the middle"}`, (GOALS[R.goal] || GOALS.fair).hud, "#ffffff"); return end(); }
 
+  if (feature === "vote") { // illustrative group vote for the demo friends, then the locked-in plan
+    const top = R.venues.slice(0, 3), v0 = Math.ceil(N * 0.6), v1 = N - v0 > 0 ? Math.ceil((N - v0) / 2) : 0, votes = [v0, v1, N - v0 - v1];
+    setHud("The group voted", `${N} friends · top places by travel time`, "#ffffff");
+    card("Where should we go?", top.map((x, i) => ({ a: x.name, b: `${"●".repeat(votes[i] || 0)} ${votes[i] || 0} vote${votes[i] === 1 ? "" : "s"}`, hi: i === 0 })), "Everyone votes from the same link.");
+    await wait(3800);
+    await pickVenue(0);
+    setHud(`Locked in: ${v.name}`, fmtClock(at), "#ffffff");
+    card("Locked in ✓", [{ a: v.name, b: fmtClock(at), hi: true }, { a: "Longest trip", b: mins(Math.max(...v.t)) }], "Calendar invite and leave-at times for everyone.");
+    return end(4200);
+  }
   if (feature === "top5") {
     setHud(`Top ${R.venues.length} places for ${N} friends`, "Ranked by everyone's real travel time", "#ffffff");
     card("Best places for the group", R.venues.map((x, i) => ({ a: `${i + 1}. ${x.name}`, b: `max ${mins(Math.max(...x.t))}`, hi: i === 0 })));
@@ -2562,10 +2699,13 @@ paintWant();
 refresh();
 if (!REEL) fitToPeople(); // reel mode frames the group itself (an animated fit would override it)
 if (planFromLink && !REEL) planOpen(planFromLink);
+renderGroups();
+let tourSeen = null; try { tourSeen = localStorage.getItem("hw.tour"); } catch (e) { tourSeen = "unavailable"; }
+if (!REEL && !planFromLink && !fromLink && !tourSeen && !navigator.webdriver) setTimeout(() => showTour(0), 700);
 // Only offer group plans when the plans service is reachable
 $("plan-start").hidden = true;
 if (!REEL) fetch(apiBase() + "/health", { signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined })
-  .then((r) => { if (r.ok) $("plan-start").hidden = false; }).catch(() => {});
+  .then((r) => { if (r.ok) { $("plan-start").hidden = false; plansAvailable = true; renderGroups(); } }).catch(() => {});
 if (REEL) {
   map.invalidateSize();
   map.options.zoomSnap = 0.1; // fine zoom so the group fills the frame
