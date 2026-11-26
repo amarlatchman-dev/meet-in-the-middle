@@ -9,21 +9,11 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Comma-separated region ids to build (blank = all)"
+        description: "Region ids to build, comma-separated, or 'all' for every region (all = ~41 machines; only worth it once R2 is set up)"
         required: false
-        default: ""
+        default: "ontario,antigua-and-barbuda"
   schedule:
     - cron: "17 6 3 * *"  # monthly; run it by hand from the Actions tab when needed
-  push:
-    branches: [main]
-    paths:  # only the map builders, so unrelated pushes (e.g. social posting) don't restart a build
-      - "tools/build_region.py"
-      - "tools/build_pois.py"
-      - "tools/build_transit.py"
-      - "tools/fetch_overpass.py"
-      - "tools/make_index.py"
-      - "tools/regions.json"
-      - ".github/workflows/build-maps.yml"
 
 permissions:
   contents: read
@@ -41,13 +31,14 @@ jobs:
       - uses: actions/checkout@v4
       - id: m
         env:
-          ONLY: ${{ github.event.inputs.only }}
+          # scheduled runs build only the regions the live site uses
+          ONLY: ${{ github.event.inputs.only || 'ontario,antigua-and-barbuda' }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           regions = json.load(open("tools/regions.json"))
           only = {x.strip() for x in os.environ.get("ONLY", "").split(",") if x.strip()}
-          if only:
+          if only and "all" not in only:
               regions = [r for r in regions if r["id"] in only]
           print("regions=" + json.dumps(regions))
           PY
@@ -55,7 +46,7 @@ jobs:
   build:
     needs: plan
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       max-parallel: 15
@@ -96,7 +87,7 @@ jobs:
             done
           done
           # The mirror briefly removes files while refreshing them; wait and retry the main path
-          for wait in 180 300; do
+          for wait in 60 120; do
             [ "$ok" = 1 ] && break
             echo "Waiting ${wait}s for the mirror, then retrying"; sleep "$wait"
             curl -fL --connect-timeout 30 --max-time 3600 -o region.osm.pbf "https://download.openstreetmap.fr/extracts/$P-latest.osm.pbf" && ok=1
