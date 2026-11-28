@@ -1,0 +1,25 @@
+{
+  "_about": "Reels already posted by the Daily social reel workflow (written by tools/post_daily.py). The next post is the first schedule entry not listed here; once every entry has been posted, the least recently posted one goes next.",
+  "posted": [
+    {
+      "id": "ajax-whitby-oshawa-pickering-who-drives-least",
+      "date": "2026-11-25",
+      "at": "2026-11-25T05:00:15Z"
+    },
+    {
+      "id": "we-voted-on-where-to-eat",
+      "date": "2026-11-25",
+      "at": "2026-11-26T04:19:35Z"
+    },
+    {
+      "id": "our-friend-group-s-fair-spot",
+      "date": "2026-11-26",
+      "at": "2026-11-27T04:29:46Z"
+    },
+    {
+      "id": "ajax-whitby-oshawa-pickering-who-drives-least",
+      "date": "2026-11-27",
+      "at": "2026-11-28T04:10:15Z"
+    }
+  ]
+}

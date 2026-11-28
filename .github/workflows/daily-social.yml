@@ -23,7 +23,7 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write  # to save social/posted.json (the log that prevents repeats)
 
 concurrency:
   group: daily-social
@@ -52,6 +52,23 @@ jobs:
           PLATFORMS: ${{ github.event.inputs.platforms || 'instagram,facebook' }}
           DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
         run: python3 tools/post_daily.py
+      - name: Save the posting log
+        if: always()
+        run: |
+          [ -n "$(git status --porcelain social/posted.json)" ] || { echo "No new post to log"; exit 0; }
+          cp social/posted.json "$RUNNER_TEMP/posted.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch -q origin main && git checkout -q -B log-update origin/main
+            cp "$RUNNER_TEMP/posted.json" social/posted.json
+            git add social/posted.json
+            git diff --cached --quiet && exit 0
+            git commit -q -m "Log today's reel [skip ci]"
+            git push -q origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1
       - name: Keep the reel
         if: always()
         uses: actions/upload-artifact@v4

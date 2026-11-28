@@ -3,14 +3,14 @@
 """
 Post today's Halfwise reel to Instagram and the Facebook Page.
 
-Picks one entry from social/schedule.json (cycling by day since start_date),
+Picks the next not-yet-posted entry from social/schedule.json (see social/posted.json),
 records it with tools/record_reel.js, then uploads it as a Reel to both
 accounts through the Meta Graph API.
 
 Environment:
   META_TOKEN   system-user access token (required; GitHub secret)
   PAGE_ID      Facebook Page ID (optional; found from the token if blank)
-  POST_INDEX   force a schedule entry by number (optional)
+  POST_INDEX   force a schedule entry by number (optional; still logged)
   PLATFORMS    "instagram,facebook" (default both)
   DRY_RUN      "1" records the reel but posts nothing
 """
@@ -28,24 +28,46 @@ API = "https://graph.facebook.com/v21.0"
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def pick_entry():
-    sched = json.loads((ROOT / "social" / "schedule.json").read_text())
+LOG = ROOT / "social" / "posted.json"
+
+
+def today_toronto():
+    # scheduled runs often start hours late, so "today" means today in Toronto, not UTC
+    try:
+        from zoneinfo import ZoneInfo
+        return dt.datetime.now(ZoneInfo("America/Toronto")).date().isoformat()
+    except Exception:
+        return dt.date.today().isoformat()
+
+
+def read_log():
+    try:
+        return json.loads(LOG.read_text())
+    except (OSError, ValueError):
+        return {"posted": []}
+
+
+def candidates(sched, log):
+    """Schedule entries in posting order: never-posted first (in list order),
+    then the least recently posted. A forced POST_INDEX goes first."""
     posts = sched["posts"]
+    last = {}
+    for rec in log.get("posted", []):
+        last[rec["id"]] = max(last.get(rec["id"], ""), rec["date"])
+    order = sorted(range(len(posts)), key=lambda i: (posts[i]["id"] in last, last.get(posts[i]["id"], ""), i))
     if os.environ.get("POST_INDEX", "").strip():
-        i = int(os.environ["POST_INDEX"]) % len(posts)
-    else:
-        start = dt.date.fromisoformat(sched["start_date"])
-        i = max(0, (dt.date.today() - start).days) % len(posts)
-    e = posts[i]
-    n = len(e["people"].split("|"))
+        forced = int(os.environ["POST_INDEX"]) % len(posts)
+        order = [forced] + [i for i in order if i != forced]
+    return order
+
+
+def caption_for(sched, e):
     body = e.get("caption") or "Everyone floods out along the real streets, and the fair spot is where they meet."
-    caption = (
+    return (
         f"{e['hook']} 📍 {body}\n\n"
         f"Try it with your group: halfwise.app (link in bio)\n\n"
         f"{e.get('tags', '')} {sched.get('hashtags_default', '')}".strip()
     )
-    print(f"Entry #{i}: {e['city']} ({n} people, {e.get('mode', 'drive')})")
-    return i, e, caption
 
 
 def record(e, out):
@@ -112,40 +134,54 @@ def post_facebook(page, video, caption):
 
 def main():
     sched = json.loads((ROOT / "social" / "schedule.json").read_text())
-    if not os.environ.get("POST_INDEX", "").strip() and dt.date.today().isoformat() in sched.get("skip_dates", []):
-        print("Today is in skip_dates (already posted by hand); nothing to do.")
+    log = read_log()
+    today = today_toronto()
+    forced = bool(os.environ.get("POST_INDEX", "").strip())
+    now = dt.datetime.now(dt.timezone.utc)
+    recent = [r for r in log.get("posted", []) if r.get("at") and now - dt.datetime.fromisoformat(r["at"].replace("Z", "+00:00")) < dt.timedelta(hours=18)]
+    if not forced and recent:
+        print(f"A reel was posted less than 18 hours ago ({recent[-1]['at']}); nothing to do.")
         return
-    i, e, caption = pick_entry()
-    for attempt in range(4):  # if a city fails to record, fall back to the next entry
+    order = candidates(sched, log)
+    video = e = None
+    for i in order[:4]:  # if a reel fails to record, try the next unposted one
+        e = sched["posts"][i]
+        print(f"Entry #{i} [{e['id']}]: {e['city']} ({len(e['people'].split('|'))} people, {e.get('mode', 'drive')})")
         video = ROOT / f"reel-{i}.mp4"
         try:
             record(e, video)
             break
         except subprocess.CalledProcessError:
-            print(f"::warning::Recording entry #{i} failed; trying the next one")
-            os.environ["POST_INDEX"] = str(i + 1)
-            i, e, caption = pick_entry()
-    else:
+            print(f"::warning::Recording {e['id']} failed; trying the next one")
+            video = None
+    if not video:
         sys.exit("Recording failed for 4 entries in a row")
+    caption = caption_for(sched, e)
     if os.environ.get("DRY_RUN") == "1":
         print("Dry run: recorded, not posting.\n" + caption)
         return
     token = os.environ["META_TOKEN"]
     page, ig = find_accounts(token)
     want = os.environ.get("PLATFORMS", "instagram,facebook")
-    failures = []
+    failures, done = [], []
     if "instagram" in want:
         try:
             if not ig:
                 raise RuntimeError("Instagram account isn't linked to the Page")
             post_instagram(ig, token, video, caption)
+            done.append("instagram")
         except Exception as ex:
             failures.append(f"Instagram: {ex}")
     if "facebook" in want:
         try:
             post_facebook(page, video, caption)
+            done.append("facebook")
         except Exception as ex:
             failures.append(f"Facebook: {ex}")
+    if done:  # log it even if one platform failed, so it isn't posted again tomorrow
+        log.setdefault("posted", []).append({"id": e["id"], "date": today, "at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "platforms": done})
+        LOG.write_text(json.dumps(log, indent=2) + "\n")
+        print(f"Logged {e['id']} as posted on {today}")
     for f in failures:
         print("::error::" + f)
     if failures:

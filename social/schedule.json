@@ -1,9 +1,6 @@
 {
-  "_about": "Daily reels for Instagram + Facebook, GTA and Southern Ontario only for now (the pre-built maps cover Ontario). The workflow posts one entry per day, cycling in order. Keys: city, hook, people ('Name@lat,lon|...'), optional mode (drive|transit|bike|walk), goal (fair|balanced|total), want (any|food|drinks|coffee|activity|free), feature (venue|top5|leave|compare|open|parking|free|mode), when ('HH:MM'), place, caption.",
+  "_about": "Daily reels for Instagram + Facebook, GTA and Southern Ontario only for now (the pre-built maps cover Ontario). The workflow posts one entry per day: the first entry (in list order) that hasn't been posted yet, using social/posted.json as the log, so editing or reordering this list never causes repeats. Give new entries a unique 'id'. Keys: city, hook, people ('Name@lat,lon|...'), optional mode (drive|transit|bike|walk), goal (fair|balanced|total), want (any|food|drinks|coffee|activity|free), feature (venue|top5|leave|compare|open|parking|free|mode), when ('HH:MM'), place, caption.",
   "start_date": "2026-11-20",
-  "skip_dates": [
-    "2026-11-20"
-  ],
   "hashtags_default": "#toronto #gta #ontario #friends #hangout #thingstodotoronto #halfwise",
   "posts": [
     {
@@ -13,7 +10,8 @@
       "want": "food",
       "feature": "venue",
       "when": "19:00",
-      "caption": "Halfwise finds a restaurant that's fair for everyone, not just the person who picks."
+      "caption": "Halfwise finds a restaurant that's fair for everyone, not just the person who picks.",
+      "id": "4-friends-1-restaurant-0-arguments"
     },
     {
       "city": "Greater Toronto Area",
@@ -22,7 +20,8 @@
       "want": "any",
       "feature": "top5",
       "when": "19:30",
-      "caption": "The top 5 places ranked by everyone's real travel time. Vote, pick, done."
+      "caption": "The top 5 places ranked by everyone's real travel time. Vote, pick, done.",
+      "id": "stop-arguing-in-the-group-chat"
     },
     {
       "city": "Toronto",
@@ -31,14 +30,16 @@
       "want": "food",
       "feature": "leave",
       "when": "19:00",
-      "caption": "Everyone gets their own leave-at time so the whole group arrives together."
+      "caption": "Everyone gets their own leave-at time so the whole group arrives together.",
+      "id": "when-should-everyone-leave"
     },
     {
       "city": "Greater Toronto Area",
       "hook": "Why the 'middle' isn't always fair",
       "people": "Nia@43.6453,-79.3806|Theo@43.6383,-79.4201|Zara@43.6623,-79.3307|Sam@43.8971,-78.8658",
       "feature": "compare",
-      "caption": "Fairest, Balanced or Least total? One far-away friend changes everything."
+      "caption": "Fairest, Balanced or Least total? One far-away friend changes everything.",
+      "id": "why-the-middle-isn-t-always-fair"
     },
     {
       "city": "Toronto",
@@ -48,16 +49,8 @@
       "want": "coffee",
       "feature": "mode",
       "when": "14:00",
-      "caption": "Transit mode uses subway, streetcar and GO lines to find a spot fair for everyone without a car."
-    },
-    {
-      "city": "Stop arguing in the group chat",
-      "hook": "Stop arguing in the group chat",
-      "people": "Priyanka@43.6851,-79.7597|Devon@43.8696,-79.2870|Sasha@43.4675,-79.6877|Malik@43.8357,-79.0857",
-      "want": "any",
-      "feature": "top5",
-      "when": "19:30",
-      "caption": "Halfwise finds the spot that's fair for everyone and ranks the best places by real travel time. Group plans, solved."
+      "caption": "Transit mode uses subway, streetcar and GO lines to find a spot fair for everyone without a car.",
+      "id": "driving-vs-the-ttc-where-do-you-meet"
     },
     {
       "city": "We voted on where to eat",
@@ -66,7 +59,8 @@
       "want": "food",
       "feature": "vote",
       "when": "19:00",
-      "caption": "Start a group plan, share the link, everyone votes, lock it in. Calendar invite and leave-at times included."
+      "caption": "Start a group plan, share the link, everyone votes, lock it in. Calendar invite and leave-at times included.",
+      "id": "we-voted-on-where-to-eat"
     },
     {
       "city": "Our friend group's fair spot",
@@ -75,7 +69,8 @@
       "want": "any",
       "feature": "leave",
       "when": "19:00",
-      "caption": "Save your group once, then plan again in one tap. Everyone gets their own leave-at time."
+      "caption": "Save your group once, then plan again in one tap. Everyone gets their own leave-at time.",
+      "id": "our-friend-group-s-fair-spot"
     },
     {
       "city": "Durham Region",
@@ -83,7 +78,8 @@
       "people": "Tariq@43.8509,-79.0204|Emma@43.8975,-78.9429|Josh@43.8971,-78.8658|Ana@43.8357,-79.0857",
       "want": "food",
       "feature": "venue",
-      "when": "18:30"
+      "when": "18:30",
+      "id": "ajax-whitby-oshawa-pickering-who-drives-least"
     },
     {
       "city": "Greater Toronto Area",
@@ -92,7 +88,8 @@
       "want": "food",
       "feature": "open",
       "when": "23:00",
-      "caption": "Filter to places open when you meet, not just open now."
+      "caption": "Filter to places open when you meet, not just open now.",
+      "id": "late-night-what-s-actually-still-open"
     },
     {
       "city": "Hamilton & Burlington",
@@ -100,7 +97,8 @@
       "people": "Liam@43.2557,-79.8711|Sofia@43.3255,-79.7990|Noor@43.4675,-79.6877|Ben@43.5183,-79.8774",
       "want": "drinks",
       "feature": "venue",
-      "when": "20:00"
+      "when": "20:00",
+      "id": "hamilton-to-burlington-meet-in-the-middle"
     },
     {
       "city": "Greater Toronto Area",
@@ -109,7 +107,8 @@
       "want": "free",
       "feature": "free",
       "when": "13:00",
-      "caption": "Parks, libraries, malls and more: fair for everyone and free."
+      "caption": "Parks, libraries, malls and more: fair for everyone and free.",
+      "id": "hangout-spots-that-cost-0"
     },
     {
       "city": "Waterloo Region",
@@ -117,7 +116,8 @@
       "people": "Owen@43.4516,-80.4925|Ella@43.4643,-80.5204|Nate@43.3616,-80.3144|Gia@43.5448,-80.2482",
       "want": "coffee",
       "feature": "top5",
-      "when": "15:00"
+      "when": "15:00",
+      "id": "kitchener-waterloo-cambridge-guelph-the-fair-spo"
     },
     {
       "city": "Greater Toronto Area",
@@ -126,7 +126,8 @@
       "want": "activity",
       "feature": "parking",
       "when": "19:00",
-      "caption": "See free and paid parking right next to the spot."
+      "caption": "See free and paid parking right next to the spot.",
+      "id": "where-to-park-when-you-meet-up"
     },
     {
       "city": "Toronto",
@@ -135,7 +136,8 @@
       "mode": "bike",
       "want": "coffee",
       "feature": "mode",
-      "when": "11:00"
+      "when": "11:00",
+      "id": "biking-across-toronto-where-do-you-meet"
     },
     {
       "city": "Greater Toronto Area",
@@ -144,7 +146,8 @@
       "want": "activity",
       "feature": "venue",
       "when": "19:30",
-      "caption": "Escape rooms, bowling, arcades, karaoke, pool halls: find the fair one."
+      "caption": "Escape rooms, bowling, arcades, karaoke, pool halls: find the fair one.",
+      "id": "escape-room-night-fair-for-everyone"
     },
     {
       "city": "York Region",
@@ -152,7 +155,8 @@
       "people": "Lucas@44.0592,-79.4613|Ayla@43.8828,-79.4403|Finn@43.9706,-79.2446|Mira@43.8255,-79.5385",
       "want": "food",
       "feature": "leave",
-      "when": "18:30"
+      "when": "18:30",
+      "id": "newmarket-richmond-hill-stouffville-vaughan"
     },
     {
       "city": "Greater Toronto Area",
@@ -160,14 +164,16 @@
       "people": "A@43.5933,-79.6441|B@43.7757,-79.2578|C@43.8255,-79.5385|D@43.6383,-79.4201|E@43.6851,-79.7597|F@43.8696,-79.2870|G@43.4675,-79.6877|H@43.8357,-79.0857|I@43.8828,-79.4403|J@43.6372,-79.5361",
       "want": "food",
       "feature": "top5",
-      "when": "19:00"
+      "when": "19:00",
+      "id": "10-friends-one-fair-spot"
     },
     {
       "city": "Niagara",
       "hook": "St. Catharines to Niagara Falls: meet halfway",
       "people": "Cam@43.1594,-79.2469|Lou@43.0896,-79.0849|Rhea@43.2557,-79.8711|Sid@43.3255,-79.7990",
       "want": "drinks",
-      "feature": "compare"
+      "feature": "compare",
+      "id": "st-catharines-to-niagara-falls-meet-halfway"
     },
     {
       "city": "Greater Toronto Area",
@@ -176,7 +182,8 @@
       "want": "coffee",
       "feature": "leave",
       "when": "10:30",
-      "caption": "Two people, one fair coffee spot, and when to leave."
+      "caption": "Two people, one fair coffee spot, and when to leave.",
+      "id": "coffee-date-halfway"
     },
     {
       "city": "Toronto",
@@ -185,14 +192,16 @@
       "mode": "transit",
       "want": "food",
       "feature": "leave",
-      "when": "18:00"
+      "when": "18:00",
+      "id": "subway-vs-streetcar-vs-go-fair-for-transit-rider"
     },
     {
       "city": "Barrie to Toronto",
       "hook": "Barrie, Newmarket, Toronto: who drives farthest?",
       "people": "Ty@44.3894,-79.6903|Ally@44.0592,-79.4613|Ken@43.6453,-79.3806|Jo@43.5183,-79.8774",
       "want": "food",
-      "feature": "compare"
+      "feature": "compare",
+      "id": "barrie-newmarket-toronto-who-drives-farthest"
     },
     {
       "city": "Greater Toronto Area",
@@ -200,7 +209,8 @@
       "people": "Raj@43.6851,-79.7597|Mei@43.8696,-79.2870|Ola@43.5933,-79.6441",
       "want": "drinks",
       "feature": "parking",
-      "when": "21:00"
+      "when": "21:00",
+      "id": "brampton-markham-mississauga-who-drives-least"
     }
   ]
 }
